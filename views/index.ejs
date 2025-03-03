@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Secure Chat</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <h1>Secure Chat</h1>
+    <ul id="messages">
+      <% messages.forEach((message) => { %>
+      <li class="encrypted-message"><%= message.text %></li>
+      <% }); %>
+    </ul>
+
+    <form id="form">
+      <input id="input" autocomplete="off" placeholder="Type a message..." />
+      <button>Send</button>
+    </form>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.js"></script>
+    <script>
+      const socket = io();
+      const form = document.getElementById('form');
+      const input = document.getElementById('input');
+      const messages = document.getElementById('messages');
+
+      // Encryption key (you can make this dynamic later)
+      const secretKey = 'mySuperSecretKey123';
+
+      // Decrypt saved messages on page load
+
+      // Function to encrypt message
+      function encryptMessage(message) {
+        return CryptoJS.AES.encrypt(message, secretKey).toString();
+      }
+
+      // Function to decrypt message
+      function decryptMessage(cipherText) {
+        try {
+          const bytes = CryptoJS.AES.decrypt(cipherText, secretKey);
+          return bytes.toString(CryptoJS.enc.Utf8);
+        } catch (err) {
+          return '[Decryption failed]';
+        }
+      }
+
+      window.onload = () => {
+        const encryptedMessages =
+          document.querySelectorAll('.encrypted-message');
+        encryptedMessages.forEach((item) => {
+          const decryptedText = decryptMessage(item.textContent);
+          item.textContent = decryptedText || '[Unable to decrypt]';
+        });
+      };
+
+      // Send encrypted message
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (input.value) {
+          const encryptedMessage = encryptMessage(input.value);
+          socket.emit('chat message', encryptedMessage);
+          input.value = '';
+        }
+      });
+
+      // Receive and decrypt messages
+      socket.on('chat message', (encryptedMsg) => {
+        const decryptedMsg = decryptMessage(encryptedMsg);
+        const item = document.createElement('li');
+        item.textContent = decryptedMsg || '[Unable to decrypt]';
+        messages.appendChild(item);
+        window.scrollTo(0, document.body.scrollHeight);
+      });
+    </script>
+  </body>
+</html>
