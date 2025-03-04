@@ -17,7 +17,7 @@
         margin: 0;
         font-family: 'Poppins', sans-serif;
         background: linear-gradient(135deg, #1a1a1a 0%, #2e2e2e 100%);
-        background-image: url('../public/img/back.jpg');
+        background-image: url('/img/back.jpg');
         background-size: cover;
         backdrop-filter: blur(10px);
       }
@@ -139,34 +139,43 @@
         const usernameOrEmail = formData.get('usernameOrEmail');
         const password = formData.get('password');
 
+        messageDiv.style.display = 'none'; // Hide previous messages
+
         // Send AJAX request
         fetch('/api/users/login', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
+          credentials: 'include', // Important if you’re using cookies for tokens
           body: JSON.stringify({ usernameOrEmail, password }),
         })
-          .then((response) => response.json())
-          .then((data) => {
-            // Reset the message classes
-            messageDiv.classList.remove('error', 'success');
-            messageDiv.style.display = 'block';
-
-            // Check the status and apply the appropriate style
-            if (data.success) {
-              // Optionally, redirect the user to the dashboard
-              window.location.href = '/dashboard';
-            } else {
-              messageDiv.classList.add('error');
-              messageDiv.textContent = data.message || 'An error occurred.';
+          .then((response) => {
+            if (!response.ok) {
+              // Handle non-200 responses
+              return response.json().then((data) => {
+                throw new Error(data.message || 'Login failed');
+              });
             }
+            return response.json();
+          })
+          .then((data) => {
+            messageDiv.classList.remove('error', 'success');
+            messageDiv.classList.add('success');
+            messageDiv.style.display = 'block';
+            messageDiv.textContent = data.message || 'Login successful!';
+
+            // Redirect on success
+            setTimeout(() => {
+              window.location.href = '/dashboard'; // Or your desired route
+            }, 1000);
           })
           .catch((error) => {
-            // Handle network errors
+            // Handle errors and show message
+            messageDiv.classList.remove('success');
             messageDiv.classList.add('error');
             messageDiv.style.display = 'block';
-            messageDiv.textContent = 'Network error. Please try again later.';
+            messageDiv.textContent = error.message || 'An error occurred.';
           });
       });
     </script>

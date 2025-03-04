@@ -2,7 +2,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const validator = require('validator');
 
-const AppError = require('../utils/appError');
+const AppError = require('../utils/AppError');
 
 const User = require('./../models/User');
 
@@ -291,9 +291,9 @@ exports.isLoggedIn = async (req, res, next) => {
     // Attach the user to the request object
     req.user = user;
 
-    next(); // Continue to the next middleware/route
+    next();
   } catch (err) {
-    return next(new appError('Invalid token. Please log in again.', 401));
+    return next(new AppError('Invalid token. Please log in again.', 401));
   }
 };
 
