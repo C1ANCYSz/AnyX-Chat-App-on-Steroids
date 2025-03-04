@@ -30,13 +30,20 @@ router.get('/verify-email', (req, res) => {
 
 router.get('/forgot-password', (req, res) => res.render('forgotPassword'));
 
-router.get('/dashboard', isVerified, async (req, res) => {
+router.get('/convos', isVerified, async (req, res) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
     const conversations = await Conversation.find({
       members: { $in: [req.user._id] },
     })
       .populate('members')
-      .populate('lastMessage');
+      .populate('lastMessage')
+      .sort({ updatedAt: -1 })
+      .skip(skip)
+      .limit(limit);
 
     const filteredConversations = conversations.map((convo) => {
       const otherUser = convo.members.find(
@@ -54,11 +61,15 @@ router.get('/dashboard', isVerified, async (req, res) => {
       };
     });
 
-    res.render('dashboard', { conversations: filteredConversations });
+    res.json(filteredConversations);
   } catch (error) {
     console.error('Error fetching conversations:', error);
-    res.status(500).send('Internal Server Error');
+    res.status(500).json({ message: 'Internal Server Error' });
   }
+});
+
+router.get('/dashboard', isVerified, async (req, res) => {
+  res.render('dashboard');
 });
 
 module.exports = router;

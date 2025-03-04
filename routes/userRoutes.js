@@ -28,4 +28,11 @@ router.post('/reset-password/:token', resetPassword);
 
 router.get('/dashboard', isLoggedIn, isVerified, userControllers.dashboard);
 
+router.get(
+  '/search-users',
+  isLoggedIn,
+  isVerified,
+  userControllers.searchUsers
+);
+
 module.exports = router;

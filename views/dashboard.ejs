@@ -130,18 +130,71 @@
         color: white;
         cursor: pointer;
       }
-      .settings {
+      .newChat {
         position: absolute;
         top: 10px;
         right: 10px;
         background-color: rebeccapurple;
+        color: white;
+        font-size: 20px;
+        font-weight: bold;
+        text-align: center;
         padding: 10px;
         border-radius: 50%;
-        height: 20px;
-        width: 20px;
+        height: 40px;
+        width: 40px;
+        cursor: pointer;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        transition: background-color 0.3s ease;
+      }
+
+      .newChat:hover {
+        background-color: #7b1fa2;
+      }
+
+      .chatSearch {
+        position: absolute;
+        top: 60px;
+        right: 10px;
+        background: #fff;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        padding: 10px;
+        width: 250px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      #searchInput {
+        width: calc(100% - 10px);
+        padding: 8px;
+        margin-bottom: 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+      }
+
+      #searchButton {
+        width: 100%;
+        padding: 8px;
+        background-color: rebeccapurple;
+        color: white;
+        border: none;
+        border-radius: 4px;
         cursor: pointer;
       }
 
+      #searchButton:hover {
+        background-color: #7b1fa2;
+      }
+
+      .searchResults div {
+        padding: 10px;
+        cursor: pointer;
+        border-bottom: 1px solid #eee;
+      }
+
+      .searchResults div:hover {
+        background-color: #f0f0f0;
+      }
       .active {
         background: rebeccapurple;
         color: white;
@@ -153,31 +206,53 @@
         border-radius: 50%;
         margin-right: 10px;
       }
+
+      .loading p {
+        font-size: 16px;
+      }
+
+      .loading::after {
+        content: '';
+        display: block;
+        width: 24px;
+        height: 24px;
+        margin: 10px auto;
+        border: 3px solid white;
+        border-top: 3px solid #007bff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
     </style>
   </head>
   <body>
-    <div class="settings"></div>
+    <div class="newChat">+</div>
+
+    <div class="chatSearch" style="display: none">
+      <input type="text" id="searchInput" placeholder="Search for a user..." />
+      <button id="searchButton">Search</button>
+      <div class="searchResults"></div>
+    </div>
     <div class="container">
       <div class="sidebar">
         <input type="text" class="search-bar" placeholder="Search users..." />
         <div class="user-list">
-          <% if (conversations && conversations.length > 0) { %> <%
-          conversations.forEach((convo) => { %>
-          <div class="user">
-            <img
-              class="userImg"
-              src="<%= convo.otherUserImage %>"
-              alt="User Image"
-            />
-            <span class="username"><%= convo.otherUsername %></span>
-            <p>
-              <%= convo.lastMessage %>
-              <span class="time"><%= convo.lastMessageTime %></span>
-            </p>
-          </div>
-          <% }); %> <% } else { %>
-          <p style="color: white">It's quiet here...</p>
-          <% } %>
+          <!-- Users will be loaded here -->
+        </div>
+
+        <div
+          class="loading"
+          style="display: none; text-align: center; padding: 10px"
+        >
+          <p style="color: white">Loading...</p>
         </div>
       </div>
       <div class="convo">
@@ -202,6 +277,146 @@
           user.classList.add('active');
         });
       });
+
+      const userList = document.querySelector('.user-list');
+      const loadingIndicator = document.querySelector('.loading');
+
+      let page = 1;
+      const limit = 10;
+      let loading = false;
+      let hasMore = true;
+
+      // Function to fetch conversations
+      async function loadConversations() {
+        console.log('Loading conversations...');
+        if (loading || !hasMore) return;
+        loading = true;
+        loadingIndicator.style.display = 'block';
+
+        try {
+          const response = await fetch(`/convos?page=${page}&limit=${limit}`);
+          const data = await response.json();
+
+          loadingIndicator.style.display = 'none';
+
+          if (data.length === 0) {
+            hasMore = false;
+            return;
+          }
+
+          data.forEach((convo) => {
+            const userDiv = document.createElement('div');
+            userDiv.classList.add('user');
+            userDiv.innerHTML = `
+        <img class="userImg" src="${convo.otherUserImage}" alt="User Image" />
+        <span class="username">${convo.otherUsername}</span>
+        <p>
+          ${convo.lastMessage}
+          <span class="time">${convo.lastMessageTime}</span>
+        </p>
+      `;
+
+            // Handle active user click
+            userDiv.addEventListener('click', () => {
+              document
+                .querySelectorAll('.user')
+                .forEach((u) => u.classList.remove('active'));
+              userDiv.classList.add('active');
+            });
+
+            userList.appendChild(userDiv);
+          });
+
+          page++;
+        } catch (error) {
+          console.error('Error loading conversations:', error);
+        } finally {
+          loading = false;
+        }
+      }
+
+      // Load conversations on scroll
+      userList.addEventListener('scroll', () => {
+        if (
+          userList.scrollTop + userList.clientHeight >=
+          userList.scrollHeight - 50
+        ) {
+          loadConversations();
+        }
+      });
+
+      // Initial load
+      loadConversations();
+      const newChatButton = document.querySelector('.newChat');
+      const chatSearch = document.querySelector('.chatSearch');
+      const searchInput = document.getElementById('searchInput');
+      const searchButton = document.getElementById('searchButton');
+      const searchResults = document.querySelector('.searchResults');
+
+      // Show/hide search box
+      newChatButton.addEventListener('click', () => {
+        chatSearch.style.display =
+          chatSearch.style.display === 'none' ? 'block' : 'none';
+        searchInput.focus();
+      });
+
+      // Search users from the backend (only on button click)
+      searchButton.addEventListener('click', () => {
+        const query = searchInput.value.trim();
+        if (query) {
+          searchUsers(query);
+        } else {
+          searchResults.innerHTML =
+            '<div>Please enter a username to search.</div>';
+        }
+      });
+
+      // Fetch users from the server
+      async function searchUsers(query) {
+        try {
+          const response = await fetch(
+            `/api/users/search-users?query=${query}`
+          );
+          const users = await response.json();
+
+          if (users.length === 0) {
+            searchResults.innerHTML = '<div>No users found.</div>';
+            return;
+          }
+
+          searchResults.innerHTML = users
+            .map(
+              (user) => `
+      <div data-id="${user.id}">
+        ${user.username}
+        <img src="${user.image}" alt="User Image" />
+      </div>
+    `
+            )
+            .join('');
+        } catch (error) {
+          console.error('Error searching users:', error);
+          searchResults.innerHTML =
+            '<div>Error searching users. Try again later.</div>';
+        }
+      }
+
+      // Start chat when a user is clicked
+      searchResults.addEventListener('click', (e) => {
+        if (e.target.dataset.id) {
+          const userId = e.target.dataset.id;
+          const username = e.target.innerText;
+
+          startChat(userId, username);
+          chatSearch.style.display = 'none';
+          searchInput.value = '';
+        }
+      });
+
+      function startChat(userId, username) {
+        console.log('Starting chat with:', username, 'ID:', userId);
+        alert(`Chat started with ${username}!`);
+      }
     </script>
   </body>
 </html>
