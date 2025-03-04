@@ -27,6 +27,8 @@ router.get('/verify-email', (req, res) => {
   res.render('verifyEmail', { message: '' });
 });
 
+router.get('/forgot-password', (req, res) => res.render('forgotPassword'));
+
 router.get('/dashboard', isVerified, (req, res) => res.render('dashboard'));
 
 module.exports = router;

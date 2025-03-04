@@ -6,54 +6,70 @@
     <link rel="stylesheet" href="/css/styles.css" />
     <title>Sign Up</title>
     <style>
+      @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
+      * {
+        font-family: 'Poppins', sans-serif;
+      }
       body {
         display: flex;
         justify-content: center;
         align-items: center;
         height: 100vh;
-        background-color: #f4f4f9;
-        font-family: Arial, sans-serif;
         margin: 0;
+        background: url('../public/img/back.jpg') no-repeat center center fixed;
+        background-size: cover;
+        backdrop-filter: blur(10px);
+
+        font-family: 'Poppins', sans-serif;
       }
 
       .signup-container {
-        background-color: #ffffff;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
         padding: 2rem;
-        border-radius: 8px;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        width: 300px;
+        width: 320px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: #fff;
       }
 
       .signup-container h2 {
         margin-bottom: 1.5rem;
         text-align: center;
-        color: #333333;
       }
 
-      .signup-container input[type='text'],
-      .signup-container input[type='email'],
-      .signup-container input[type='password'] {
-        width: 100%;
+      .signup-container input {
+        width: 92%;
         padding: 0.8rem;
-        margin: 0.5rem 0 1rem 0;
-        border: 1px solid #dddddd;
-        border-radius: 4px;
+        margin: 0.5rem 0;
+        border: none;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.2);
+        color: #fff;
+        outline: none;
+      }
+
+      .signup-container input::placeholder {
+        color: rgba(255, 255, 255, 0.6);
       }
 
       .signup-container button {
-        width: 100%;
+        width: 40%;
         padding: 0.8rem;
-        background-color: #007bff;
-        color: #ffffff;
+        background: linear-gradient(135deg, #360186, #0056b3);
+        color: #fff;
         border: none;
-        border-radius: 4px;
+        border-radius: 6px;
         font-size: 1rem;
         cursor: pointer;
-        transition: background-color 0.3s;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        margin-top: 1rem;
       }
 
       .signup-container button:hover {
-        background-color: #0056b3;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 10px rgba(0, 123, 255, 0.5);
       }
 
       .signup-container .message {
@@ -81,6 +97,12 @@
       .signup-container a:hover {
         text-decoration: underline;
       }
+      .flxStart {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+      }
     </style>
   </head>
   <body>
@@ -88,7 +110,7 @@
       <h2>Sign Up</h2>
       <div class="message" id="message"></div>
       <form id="signup-form">
-        <input type="text" name="username" placeholder="username" required />
+        <input type="text" name="username" placeholder="Username" required />
         <input type="email" name="email" placeholder="Email" required />
         <input
           type="password"
@@ -102,9 +124,11 @@
           placeholder="Confirm Password"
           required
         />
-        <button type="submit">Sign Up</button>
+        <div class="flxStart">
+          <button type="submit">Sign Up</button>
+          <a href="/login">Login?</a>
+        </div>
       </form>
-      <a href="/users/login">Already have an account? Login</a>
     </div>
 
     <script>

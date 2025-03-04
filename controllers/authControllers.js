@@ -72,14 +72,10 @@ exports.login = async (req, res, next) => {
 exports.signUp = async (req, res, next) => {
   let { username, email, password, confirmPassword } = req.body;
 
-  console.log(username, email, password, confirmPassword);
-
   username = username.trim();
   email = email.trim();
   username = validator.escape(username);
   email = validator.escape(email);
-  password = validator.escape(password);
-  confirmPassword = validator.escape(confirmPassword);
 
   // Validate inputs
   if (!username || !email || !password || !confirmPassword) {
@@ -109,7 +105,6 @@ exports.signUp = async (req, res, next) => {
       new AppError('User with this email or username already exists', 400)
     );
   }
-
   const verificationToken = generateVerificationToken();
   let newUser = await User.create({
     username,
@@ -148,7 +143,6 @@ exports.logout = async (req, res) => {
 
 exports.verifyEmail = async (req, res, next) => {
   const { verificationToken } = req.body;
-  console.log('Verification Token:', verificationToken);
 
   try {
     if (!verificationToken) {
@@ -166,20 +160,16 @@ exports.verifyEmail = async (req, res, next) => {
       return res.render('verifyEmail', { message: 'Invalid or expired token' });
     }
 
-    // Mark user as verified
     user.isVerified = true;
     user.verificationToken = undefined;
     user.verificationTokenExpiresAt = undefined;
 
     await user.save({ validateBeforeSave: false });
 
-    // Send welcome email (if you want)
-
     tokenAndCookie(user._id, res);
 
     await sendWelcomeEmail(user.email, user.name);
 
-    // Redirect to dashboard after successful verification
     res.status(200).redirect('/dashboard');
   } catch (err) {
     console.error(err);
@@ -191,7 +181,7 @@ exports.verifyEmail = async (req, res, next) => {
 
 exports.forgotPassword = async (req, res, next) => {
   const { email } = req.body;
-  console.log(email);
+
   if (!email) {
     return res.status(400).json({
       status: 'fail',
@@ -209,13 +199,15 @@ exports.forgotPassword = async (req, res, next) => {
 
   const resetToken = await user.createPasswordResetToken();
 
+  await user.save({ validateBeforeSave: false });
+
   await sendPasswordResetEmail(
     user.email,
-    `${process.env.CLIENT_URL}/users/reset-password/${resetToken}`
+    `${process.env.CLIENT_URL}/reset-password/${resetToken}`
   );
 
   return res.status(200).json({
-    status: 'success',
+    success: true,
     message: 'Password reset link sent to email',
   });
 };

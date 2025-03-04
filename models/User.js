@@ -56,27 +56,17 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-
-    passwordChangedAt: Date,
-    resetPasswordToken: String,
-    resetPasswordExpiresAt: Date,
     verificationToken: String,
     verificationTokenExpiresAt: Date,
+
+    resetPasswordToken: String,
+    resetPasswordExpiresAt: Date,
+    passwordChangedAt: Date,
   },
   {
     timestamps: true,
   }
 );
-
-userSchema.set('toJSON', {
-  transform: (doc, ret) => {
-    delete ret.password;
-    delete ret.__v;
-    delete ret.verificationToken;
-    delete ret.resetPasswordToken;
-    return ret;
-  },
-});
 
 // Password hashing middleware
 userSchema.pre('save', async function (next) {
@@ -109,11 +99,14 @@ userSchema.methods.isTokenExpired = function (expiresAt) {
 // Create a password reset token
 userSchema.methods.createPasswordResetToken = function () {
   const resetToken = crypto.randomBytes(32).toString('hex');
+
   this.resetPasswordToken = crypto
     .createHash('sha256')
     .update(resetToken)
     .digest('hex');
+
   this.resetPasswordExpiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
   return resetToken;
 };
 
