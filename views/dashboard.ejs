@@ -32,7 +32,7 @@
       }
 
       .sidebar {
-        flex: 0.6;
+        flex: 0.8;
         background-color: rgba(255, 255, 255, 0.1);
         border-top-left-radius: 10px;
         border-bottom-left-radius: 10px;
@@ -62,6 +62,8 @@
         display: flex;
         align-items: center;
         transition: background 0.2s ease-in-out;
+        display: flex;
+        flex-direction: column;
       }
 
       .user:hover {
@@ -201,12 +203,30 @@
       }
 
       .userImg {
-        width: 40px;
-        height: 40px;
+        width: 50px;
+        height: 50px;
         border-radius: 50%;
-        margin-right: 10px;
+        object-fit: cover;
+        border: 2px solid #ddd;
+      }
+      .username {
+        font-size: 1rem;
+        font-weight: bold;
+        color: white;
       }
 
+      .lastMessage {
+        font-size: 0.9rem;
+        color: white;
+        margin: 0;
+        line-height: 1.4;
+      }
+
+      .time {
+        font-size: 0.75rem;
+        color: #888;
+        align-self: flex-end;
+      }
       .loading p {
         font-size: 16px;
       }
@@ -230,6 +250,36 @@
         100% {
           transform: rotate(360deg);
         }
+      }
+
+      .horiFlex {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      .nameAndImage {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+      }
+      .ago {
+        width: 100%;
+        text-align: right;
+      }
+
+      .placeHolder h1 {
+        color: white;
+      }
+
+      .placeHolder img {
+        height: 200px;
+      }
+      .placeHolder {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
       }
     </style>
   </head>
@@ -256,35 +306,70 @@
         </div>
       </div>
       <div class="convo">
-        <div class="chat-header">User 1</div>
+        <div class="chat-header"></div>
         <div class="messages">
-          <div class="message received">Hello! How are you?</div>
-          <div class="message sent">I'm good, thanks! How about you?</div>
-          <div class="message received">I'm also doing well, thanks!</div>
-        </div>
-        <div class="input-area">
-          <input type="text" placeholder="Type a message..." />
-          <button>Send</button>
+          <div class="placeHolder">
+            <h1>select a user to chat with!</h1>
+            <img src="/img/planet.png" alt="" />
+          </div>
         </div>
       </div>
     </div>
     <script>
-      //make the clicked user the active user
       const users = document.querySelectorAll('.user');
-      users.forEach((user) => {
-        user.addEventListener('click', () => {
-          users.forEach((u) => u.classList.remove('active'));
-          user.classList.add('active');
-        });
-      });
-
+      const newChatButton = document.querySelector('.newChat');
+      const chatSearch = document.querySelector('.chatSearch');
+      const searchInput = document.getElementById('searchInput');
+      const searchButton = document.getElementById('searchButton');
+      const searchResults = document.querySelector('.searchResults');
       const userList = document.querySelector('.user-list');
       const loadingIndicator = document.querySelector('.loading');
+      const messagesContainer = document.querySelector('.messages');
+      const convo = document.querySelector('.convo');
 
       let page = 1;
       const limit = 10;
       let loading = false;
       let hasMore = true;
+      let messagesPage = 1;
+
+      function appendTextarea(conversationId) {
+        const convo = document.querySelector('.convo');
+        const inputArea = document.createElement('div');
+        inputArea.classList.add('input-area');
+        inputArea.innerHTML = `
+          <input type="text" onkeydown="handleEnter(event, '${conversationId}')" id="messageInput" placeholder="Type a message..." />
+          <button onclick="sendMessage('${conversationId}')">Send</button>
+        `;
+        if (!convo.querySelector('.input-area')) {
+          convo.appendChild(inputArea);
+        }
+      }
+
+      function handleEnter(event, conversationId) {
+        if (event.key === 'Enter') {
+          sendMessage(conversationId);
+        }
+      }
+
+      function formatTime(timestamp) {
+        const now = new Date();
+        const messageTime = new Date(timestamp);
+        const diffMs = now - messageTime;
+        const diffMinutes = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+        if (diffMinutes < 1) return 'NOW';
+        if (diffMinutes < 60)
+          return `${diffMinutes} min${diffMinutes > 1 ? 's' : ''} ago`;
+        if (diffHours < 24)
+          return `${diffHours} hr${diffHours > 1 ? 's' : ''} ago`;
+        if (diffDays < 7)
+          return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+
+        return messageTime.toLocaleDateString(); // Show full date for older messages
+      }
 
       // Function to fetch conversations
       async function loadConversations() {
@@ -307,13 +392,24 @@
           data.forEach((convo) => {
             const userDiv = document.createElement('div');
             userDiv.classList.add('user');
+            userDiv.dataset.id = convo.conversationId;
             userDiv.innerHTML = `
-        <img class="userImg" src="${convo.otherUserImage}" alt="User Image" />
-        <span class="username">${convo.otherUsername}</span>
-        <p>
-          ${convo.lastMessage}
-          <span class="time">${convo.lastMessageTime}</span>
-        </p>
+     <div class="horiFlex">
+  <div class="nameAndImage">
+    <img class="userImg" src="${convo.otherUserImage}" alt="User Image" />
+    <div class="lastMessageAndName">
+      <span class="username">@${convo.otherUsername}</span>
+      <p class="lastMessage">${convo.lastMessage}</p>
+    </div>
+  </div>
+
+  
+</div>
+
+       
+       <div class="ago">
+    <span class="time">${formatTime(convo.lastMessageTime)}</span>
+  </div>
       `;
 
             // Handle active user click
@@ -322,6 +418,10 @@
                 .querySelectorAll('.user')
                 .forEach((u) => u.classList.remove('active'));
               userDiv.classList.add('active');
+
+              fetchMessages(convo.conversationId);
+
+              appendTextarea(convo.conversationId);
             });
 
             userList.appendChild(userDiv);
@@ -335,7 +435,6 @@
         }
       }
 
-      // Load conversations on scroll
       userList.addEventListener('scroll', () => {
         if (
           userList.scrollTop + userList.clientHeight >=
@@ -347,20 +446,97 @@
 
       // Initial load
       loadConversations();
-      const newChatButton = document.querySelector('.newChat');
-      const chatSearch = document.querySelector('.chatSearch');
-      const searchInput = document.getElementById('searchInput');
-      const searchButton = document.getElementById('searchButton');
-      const searchResults = document.querySelector('.searchResults');
 
-      // Show/hide search box
+      async function fetchMessages(conversationId) {
+        document.querySelector('.placeHolder').style.display = 'none';
+
+        try {
+          const res = await fetch(
+            `/api/users/conversations/${conversationId}?page=${messagesPage}&limit=10`
+          );
+
+          const data = await res.json();
+          const { conversation, myId, hasMoreMessages: more } = data;
+
+          conversation.messages.forEach((msg) => {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add(
+              'message',
+              msg.sender?._id === myId ? 'sent' : 'received'
+            );
+            messageDiv.textContent = msg.text;
+            messagesContainer.prepend(messageDiv);
+          });
+
+          messagesPage++;
+        } catch (error) {
+          console.error('Error fetching messages:', error);
+        }
+      }
+
+      function getActiveConversationId() {
+        const activeUser = document.querySelector('.user.active');
+        return activeUser ? activeUser.dataset.id : null;
+      }
+      messagesContainer.addEventListener('scroll', () => {
+        if (messagesContainer.scrollTop === 0) {
+          const conversationId = getActiveConversationId();
+          fetchMessages(conversationId);
+        }
+      });
+
+      async function sendMessage(conversationId) {
+        const messageInput = document.getElementById('messageInput');
+
+        if (!messageInput) {
+          console.error('Message input field not found!');
+          return;
+        }
+
+        const message = messageInput.value.trim();
+        console.log('Sending message:', message);
+
+        if (!message) {
+          alert('Message cannot be empty!');
+          return;
+        }
+
+        try {
+          const res = await fetch(`/api/users/send-message/${conversationId}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ message }),
+          });
+
+          if (!res.ok) {
+            throw new Error('Failed to send message');
+          }
+
+          const newMessage = await res.json();
+
+          messageInput.value = '';
+
+          const messagesContainer = document.querySelector('.messages');
+          const messageDiv = document.createElement('div');
+          messageDiv.classList.add('message', 'sent');
+          messageDiv.textContent = newMessage.text;
+          messagesContainer.appendChild(messageDiv);
+
+          messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        } catch (error) {
+          console.error('Error sending message:', error);
+          alert('Failed to send message. Please try again.');
+        }
+      }
+
       newChatButton.addEventListener('click', () => {
         chatSearch.style.display =
           chatSearch.style.display === 'none' ? 'block' : 'none';
         searchInput.focus();
       });
 
-      // Search users from the backend (only on button click)
       searchButton.addEventListener('click', () => {
         const query = searchInput.value.trim();
         if (query) {
@@ -371,7 +547,6 @@
         }
       });
 
-      // Fetch users from the server
       async function searchUsers(query) {
         try {
           const response = await fetch(
@@ -401,7 +576,6 @@
         }
       }
 
-      // Start chat when a user is clicked
       searchResults.addEventListener('click', (e) => {
         if (e.target.dataset.id) {
           const userId = e.target.dataset.id;
@@ -412,11 +586,6 @@
           searchInput.value = '';
         }
       });
-
-      function startChat(userId, username) {
-        console.log('Starting chat with:', username, 'ID:', userId);
-        alert(`Chat started with ${username}!`);
-      }
     </script>
   </body>
 </html>

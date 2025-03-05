@@ -55,9 +55,7 @@ router.get('/convos', isVerified, async (req, res) => {
         otherUsername: otherUser?.username || 'Unknown User',
         otherUserImage: otherUser?.image || '/default-avatar.png',
         lastMessage: convo.lastMessage?.text || 'No messages yet',
-        lastMessageTime: convo.lastMessage?.timestamp
-          ? convo.lastMessage.timestamp.toLocaleTimeString()
-          : '',
+        lastMessageTime: convo.lastMessage?.timestamp,
       };
     });
 

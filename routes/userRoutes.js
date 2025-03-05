@@ -26,13 +26,25 @@ router.post('/forgot-password', forgotPassword);
 
 router.post('/reset-password/:token', resetPassword);
 
-router.get('/dashboard', isLoggedIn, isVerified, userControllers.dashboard);
-
 router.get(
   '/search-users',
   isLoggedIn,
   isVerified,
   userControllers.searchUsers
+);
+
+router.get(
+  '/conversations/:id',
+  isLoggedIn,
+  isVerified,
+  userControllers.getConversation
+);
+
+router.post(
+  '/send-message/:id',
+  isLoggedIn,
+  isVerified,
+  userControllers.sendMessage
 );
 
 module.exports = router;
