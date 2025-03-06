@@ -26,9 +26,8 @@
         border: 1px solid rgba(255, 255, 255, 0.2);
         display: flex;
         flex-direction: row;
-        height: 80%;
-        width: 80%;
-        max-width: 800px;
+        height: 97%;
+        width: 97%;
       }
 
       .sidebar {
@@ -92,6 +91,7 @@
         padding: 10px;
         display: flex;
         flex-direction: column;
+        margin-bottom: 20px;
       }
 
       .message {
@@ -281,6 +281,10 @@
         flex-direction: column;
         align-items: center;
       }
+
+      .explore {
+        flex: 1;
+      }
     </style>
   </head>
   <body>
@@ -294,9 +298,7 @@
     <div class="container">
       <div class="sidebar">
         <input type="text" class="search-bar" placeholder="Search users..." />
-        <div class="user-list">
-          <!-- Users will be loaded here -->
-        </div>
+        <div class="user-list"></div>
 
         <div
           class="loading"
@@ -314,6 +316,8 @@
           </div>
         </div>
       </div>
+
+      <div class="explore">explore</div>
     </div>
     <script>
       const users = document.querySelectorAll('.user');
@@ -328,10 +332,13 @@
       const convo = document.querySelector('.convo');
 
       let page = 1;
-      const limit = 10;
+      const limit = 50;
       let loading = false;
       let hasMore = true;
+
       let messagesPage = 1;
+      let hasMoreMessages = true;
+      let isLoading = false; // Prevent overlapping requests
 
       function appendTextarea(conversationId) {
         const convo = document.querySelector('.convo');
@@ -371,10 +378,10 @@
         return messageTime.toLocaleDateString(); // Show full date for older messages
       }
 
-      // Function to fetch conversations
       async function loadConversations() {
         console.log('Loading conversations...');
         if (loading || !hasMore) return;
+
         loading = true;
         loadingIndicator.style.display = 'block';
 
@@ -393,23 +400,22 @@
             const userDiv = document.createElement('div');
             userDiv.classList.add('user');
             userDiv.dataset.id = convo.conversationId;
+
             userDiv.innerHTML = `
-     <div class="horiFlex">
-  <div class="nameAndImage">
-    <img class="userImg" src="${convo.otherUserImage}" alt="User Image" />
-    <div class="lastMessageAndName">
-      <span class="username">@${convo.otherUsername}</span>
-      <p class="lastMessage">${convo.lastMessage}</p>
-    </div>
-  </div>
-
-  
-</div>
-
-       
-       <div class="ago">
-    <span class="time">${formatTime(convo.lastMessageTime)}</span>
-  </div>
+        <div class="horiFlex">
+          <div class="nameAndImage">
+            <img class="userImg" src="${
+              convo.otherUserImage
+            }" alt="User Image" />
+            <div class="lastMessageAndName">
+              <span class="username">@${convo.otherUsername}</span>
+              <p class="lastMessage">${convo.lastMessage}</p>
+            </div>
+          </div>
+        </div>
+        <div class="ago">
+          <span class="time">${formatTime(convo.lastMessageTime)}</span>
+        </div>
       `;
 
             // Handle active user click
@@ -419,8 +425,15 @@
                 .forEach((u) => u.classList.remove('active'));
               userDiv.classList.add('active');
 
-              fetchMessages(convo.conversationId);
+              const conversationId = convo.conversationId;
 
+              // Switch conversation and reset messages
+              switchConversation(conversationId);
+
+              // Scroll to bottom after loading initial messages
+              messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+              // Append textarea for new messages
               appendTextarea(convo.conversationId);
             });
 
@@ -435,6 +448,7 @@
         }
       }
 
+      // Scroll to load more conversations
       userList.addEventListener('scroll', () => {
         if (
           userList.scrollTop + userList.clientHeight >=
@@ -444,40 +458,75 @@
         }
       });
 
-      // Initial load
-      loadConversations();
+      function switchConversation(conversationId) {
+        messagesContainer.innerHTML = ''; // Clear previous messages
+        messagesPage = 1; // Reset pagination
+        hasMoreMessages = true; // Reset the flag
+        fetchMessages(conversationId); // Fetch new messages
+      }
 
       async function fetchMessages(conversationId) {
-        document.querySelector('.placeHolder').style.display = 'none';
+        if (!hasMoreMessages || isLoading) return;
+
+        isLoading = true;
 
         try {
           const res = await fetch(
-            `/api/users/conversations/${conversationId}?page=${messagesPage}&limit=10`
+            `/api/users/conversations/${conversationId}?page=${messagesPage}&limit=${limit}`
           );
+
+          if (!res.ok)
+            throw new Error(`Failed to fetch messages: ${res.statusText}`);
 
           const data = await res.json();
           const { conversation, myId, hasMoreMessages: more } = data;
 
-          conversation.messages.forEach((msg) => {
-            const messageDiv = document.createElement('div');
-            messageDiv.classList.add(
-              'message',
-              msg.sender?._id === myId ? 'sent' : 'received'
-            );
-            messageDiv.textContent = msg.text;
-            messagesContainer.prepend(messageDiv);
-          });
+          hasMoreMessages = more;
 
-          messagesPage++;
+          if (conversation.messages.length > 0) {
+            conversation.messages.forEach((msg) => {
+              const messageDiv = document.createElement('div');
+              messageDiv.classList.add(
+                'message',
+                msg.sender?._id === myId ? 'sent' : 'received'
+              );
+              messageDiv.textContent = msg.text;
+              messagesContainer.prepend(messageDiv);
+            });
+
+            messagesPage++;
+          } else {
+            hasMoreMessages = false;
+            if (!messagesContainer.querySelector('.noMoreMessages')) {
+              const noMoreMessages = document.createElement('div');
+              noMoreMessages.classList.add('noMoreMessages');
+              noMoreMessages.textContent = 'No more messages';
+              messagesContainer.prepend(noMoreMessages);
+            }
+          }
         } catch (error) {
           console.error('Error fetching messages:', error);
+        } finally {
+          isLoading = false;
         }
       }
+
+      // Infinite scroll for messages
+      messagesContainer.addEventListener('scroll', () => {
+        if (
+          messagesContainer.scrollTop === 0 &&
+          hasMoreMessages &&
+          !isLoading
+        ) {
+          fetchMessages(document.querySelector('.user.active')?.dataset.id);
+        }
+      });
 
       function getActiveConversationId() {
         const activeUser = document.querySelector('.user.active');
         return activeUser ? activeUser.dataset.id : null;
       }
+
       messagesContainer.addEventListener('scroll', () => {
         if (messagesContainer.scrollTop === 0) {
           const conversationId = getActiveConversationId();
@@ -586,6 +635,8 @@
           searchInput.value = '';
         }
       });
+
+      loadConversations();
     </script>
   </body>
 </html>
