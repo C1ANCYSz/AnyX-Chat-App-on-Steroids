@@ -47,4 +47,11 @@ router.post(
   userControllers.sendMessage
 );
 
+router.post(
+  '/get-conversation-key/:id',
+  isLoggedIn,
+  isVerified,
+  userControllers.getConversationKey
+);
+
 module.exports = router;

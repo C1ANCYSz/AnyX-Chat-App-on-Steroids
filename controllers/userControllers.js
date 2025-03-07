@@ -2,9 +2,60 @@ const User = require('../models/User');
 const Conversation = require('../models/Conversation');
 const AppError = require('../utils/AppError');
 const Message = require('../models/Message');
+const crypto = require('crypto');
+const fs = require('fs');
+const NodeRSA = require('node-rsa');
+
+const privateKey = fs.readFileSync('./keys/private.pem', 'utf8');
 
 require('express-async-errors');
 
+function decryptWithRSA(encryptedData, privateKey) {
+  try {
+    const key = new NodeRSA(privateKey, 'pkcs8-private-pem');
+    return key.decrypt(encryptedData, 'utf8');
+  } catch (err) {
+    console.error('RSA decryption failed:', err.message);
+    return null;
+  }
+}
+
+// RSA encryption
+function encryptWithRSA(data, publicKey) {
+  try {
+    const key = new NodeRSA(publicKey, 'pkcs8-public-pem');
+    return key.encrypt(data, 'base64');
+  } catch (err) {
+    console.error('RSA encryption failed:', err.message);
+    return null;
+  }
+}
+
+// API to handle key exchange
+exports.getConversationKey = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { publicKey } = req.body;
+
+    const conversation = await Conversation.findById(id);
+    if (!conversation) return next(new AppError('Conversation not found', 404));
+
+    // Decrypt AES key with server's private key
+    const decryptedKey = decryptWithRSA(conversation.key, privateKey);
+    if (!decryptedKey)
+      return next(new AppError('Failed to decrypt conversation key', 500));
+
+    // Encrypt AES key with client’s public key
+    const encryptedKey = encryptWithRSA(decryptedKey, publicKey);
+    if (!encryptedKey)
+      return next(new AppError('Failed to encrypt conversation key', 500));
+
+    res.status(200).json({ encryptedKey });
+  } catch (err) {
+    console.error('Failed to get conversation key:', err.message);
+    next(new AppError('Failed to get conversation key', 500));
+  }
+};
 exports.searchUsers = async (req, res) => {
   const query = req.query.query;
 

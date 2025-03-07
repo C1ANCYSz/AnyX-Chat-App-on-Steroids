@@ -1,12 +1,30 @@
 const express = require('express');
 const router = express.Router();
 const { isVerified } = require('../controllers/authControllers');
-const conversation = require('../models/Conversation');
 const Conversation = require('../models/Conversation');
-router.get('/', (req, res) => {
-  if (req.user) {
-    return res.render('dashboard');
+
+/*const loggedIn = (req, res, next) => {
+  if (!req.cookies.jwt) {
+    return res.render('home');
   }
+
+  next();
+};
+*/
+
+const createDummyConversation = async (req, res) => {
+  await Conversation.create({
+    members: [req.cookies.jwt._id],
+  });
+  return;
+};
+
+router.get('/', async (req, res) => {
+  if (req.cookies.jwt) {
+    await createDummyConversation(req, res);
+    return res.redirect('/dashboard');
+  }
+
   res.render('home');
 });
 router.get('/login', (req, res) => {

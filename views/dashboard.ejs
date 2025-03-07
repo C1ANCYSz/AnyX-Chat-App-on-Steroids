@@ -319,7 +319,35 @@
 
       <div class="explore">explore</div>
     </div>
+
+    <script src="/js/node-rsa-browser.js"></script>
+    <script src="/js/dashboard.js"></script>
+
     <script>
+      // Function to generate RSA keys
+      // Generate RSA keys
+      function generateRSAKeys() {
+        const key = new NodeRSA({ b: 2048 });
+
+        const publicKey = key.exportKey('pkcs8-public-pem');
+        const privateKey = key.exportKey('pkcs8-private-pem');
+
+        return { publicKey, privateKey };
+      }
+
+      // Store keys in variables
+      const { publicKey, privateKey } = generateRSAKeys();
+
+      function decryptWithRSA(encryptedData, privateKey) {
+        try {
+          const key = new NodeRSA(privateKey, 'pkcs8-private-pem');
+          return key.decrypt(encryptedData, 'utf8');
+        } catch (err) {
+          console.error('RSA decryption failed:', err.message);
+          return null;
+        }
+      }
+
       const users = document.querySelectorAll('.user');
       const newChatButton = document.querySelector('.newChat');
       const chatSearch = document.querySelector('.chatSearch');
@@ -338,7 +366,7 @@
 
       let messagesPage = 1;
       let hasMoreMessages = true;
-      let isLoading = false; // Prevent overlapping requests
+      let isLoading = false;
 
       function appendTextarea(conversationId) {
         const convo = document.querySelector('.convo');
@@ -465,9 +493,38 @@
         fetchMessages(conversationId); // Fetch new messages
       }
 
+      async function fetchConversationKey(convoId, publicKey) {
+        try {
+          const response = await fetch(
+            `/api/users/get-conversation-key/${convoId}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ publicKey }),
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(`Failed to fetch key: ${response.status}`);
+          }
+
+          const data = await response.json();
+
+          console.log('Fetched conversation key:', data.encryptedKey);
+          return data.encryptedKey;
+        } catch (err) {
+          console.error('Error fetching conversation key:', err);
+        }
+      }
+
       async function fetchMessages(conversationId) {
         if (!hasMoreMessages || isLoading) return;
 
+        const key = await fetchConversationKey(conversationId, publicKey);
+        console.log('Fetched conversation key:', key);
+
+        const decryptedKey = decryptWithRSA(key, privateKey);
+        console.log('Decrypted key:', decryptedKey);
         isLoading = true;
 
         try {
@@ -493,6 +550,20 @@
               messageDiv.textContent = msg.text;
               messagesContainer.prepend(messageDiv);
             });
+            //scroll to bottom of messages container
+            if (messagesPage === 1) {
+              messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            } else {
+              // Preserve the scroll position
+              const previousScrollHeight = messagesContainer.scrollHeight;
+
+              // After adding new messages, adjust scroll position
+              setTimeout(() => {
+                const newScrollHeight = messagesContainer.scrollHeight;
+                messagesContainer.scrollTop +=
+                  newScrollHeight - previousScrollHeight;
+              }, 0);
+            }
 
             messagesPage++;
           } else {
