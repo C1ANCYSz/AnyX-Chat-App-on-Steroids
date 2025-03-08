@@ -1,25 +1,20 @@
 const http = require('http');
 const { Server } = require('socket.io');
-const crypto = require('crypto');
 const mongoose = require('mongoose');
 
 const app = require('./app');
 const server = http.createServer(app);
 const io = new Server(server);
-
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const Message = require('./models/Message');
-
-// MongoDB Connection
+const Conversation = require('./models/Conversation');
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB connected'))
   .catch((err) => console.log(err));
 
-// Middleware
-
-// Socket.io logic
 io.on('connection', (socket) => {
   console.log('A user connected: ' + socket.id);
 
@@ -28,27 +23,29 @@ io.on('connection', (socket) => {
     console.log(`User ${socket.id} joined conversation ${conversationId}`);
   });
 
-  socket.on('sendMessage', ({ conversationId, message }) => {
-    console.log(`Message in ${conversationId}: ${message}`);
+  socket.on('sendMessage', async ({ conversationId, message }) => {
+    const sender = socket.handshake.headers.cookie
+      .split(';')
+      .find((cookie) => cookie.startsWith('jwt='))
+      .split('=')[1];
 
-    // Emit the message to everyone in the room (except sender)
+    const decoded = jwt.verify(sender, process.env.JWT_SECRET);
+
+    const newMessage = await Message.create({
+      text: message,
+      conversation: conversationId,
+      sender: decoded.id,
+    });
+
+    const conversation = await Conversation.findById(conversationId);
+
+    conversation.lastMessage = newMessage._id;
+    await conversation.save();
+
     socket.to(conversationId).emit('receiveMessage', {
       sender: socket.id,
       message,
     });
-  });
-
-  socket.on('chat message', async (encryptedMsg) => {
-    try {
-      // Save the encrypted message to the database
-      const message = new Message({ text: encryptedMsg });
-      await message.save();
-
-      // Broadcast encrypted message
-      io.emit('chat message', encryptedMsg);
-    } catch (err) {
-      console.log('Error saving message:', err);
-    }
   });
 
   socket.on('disconnect', () => {
@@ -56,6 +53,5 @@ io.on('connection', (socket) => {
   });
 });
 
-// Start Server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

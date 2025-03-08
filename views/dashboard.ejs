@@ -83,6 +83,13 @@
         text-align: center;
         font-weight: bold;
         margin-bottom: 10px;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 10px;
+      }
+      .chat-header img {
+        width: 50px;
       }
 
       .messages {
@@ -220,6 +227,10 @@
         color: white;
         margin: 0;
         line-height: 1.4;
+        max-width: 100px; /* Or set a fixed width */
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
       }
 
       .time {
@@ -285,6 +296,21 @@
       .explore {
         flex: 1;
       }
+
+      @media screen and (max-width: 768px) {
+        .sidebar {
+          max-width: fit-content;
+        }
+        .convo {
+          flex: 3;
+        }
+        .user {
+          overflow: hidden;
+        }
+        .lastMessage {
+          display: none;
+        }
+      }
     </style>
   </head>
   <body>
@@ -316,8 +342,6 @@
           </div>
         </div>
       </div>
-
-      <div class="explore">explore</div>
     </div>
 
     <script src="/js/node-rsa-browser.js"></script>
@@ -332,6 +356,15 @@
         console.log('Connected to server');
       });
 
+      function generateRSAKeys() {
+        const key = new NodeRSA({ b: 2048 });
+
+        return {
+          publicKey: key.exportKey('pkcs8-public-pem'),
+          privateKey: key.exportKey('pkcs8-private-pem'),
+        };
+      }
+
       function joinConversation(conversationId) {
         if (!conversationId) {
           alert('Please enter a conversation ID!');
@@ -342,16 +375,9 @@
         console.log(`Joined conversation: ${conversationId}`);
       }
 
-      function generateRSAKeys() {
-        const key = new NodeRSA({ b: 2048 });
-
-        return {
-          publicKey: key.exportKey('pkcs8-public-pem'),
-          privateKey: key.exportKey('pkcs8-private-pem'),
-        };
-      }
-
       const { publicKey, privateKey } = generateRSAKeys();
+
+      console.log('Public key:', publicKey);
 
       function encryptMessage(message, key) {
         return CryptoJS.AES.encrypt(message, key).toString();
@@ -454,11 +480,14 @@
             return;
           }
 
-          data.forEach((convo) => {
+          data.forEach(async (convo) => {
             const userDiv = document.createElement('div');
             userDiv.classList.add('user');
             userDiv.dataset.id = convo.conversationId;
-
+            const key = await fetchConversationKey(
+              convo.conversationId,
+              publicKey
+            );
             userDiv.innerHTML = `
           <div class="horiFlex">
             <div class="nameAndImage">
@@ -467,7 +496,10 @@
               }" alt="User Image" />
               <div class="lastMessageAndName">
                 <span class="username">@${convo.otherUsername}</span>
-                <p class="lastMessage">${convo.lastMessage}</p>
+                <p class="lastMessage">${decryptMessage(
+                  convo.lastMessage,
+                  key
+                )}</p>
               </div>
             </div>
           </div>
@@ -484,6 +516,13 @@
                   .forEach((u) => u.classList.remove('active'));
                 userDiv.classList.add('active');
 
+                document.querySelector('.chat-header').innerHTML = `
+          <img  src="${convo.otherUserImage}" alt="User Image" />
+          <span class="username">@${convo.otherUsername}</span>
+
+
+
+        `;
                 const conversationId = convo.conversationId;
                 globalConversationId = conversationId;
 
@@ -523,6 +562,7 @@
         }
       });
 
+      let globalDecryptedKey;
       function switchConversation(conversationId) {
         messagesContainer.innerHTML = '';
         messagesPage = 1;
@@ -548,7 +588,10 @@
           const data = await response.json();
 
           console.log('Fetched conversation key:', data.encryptedKey);
-          return data.encryptedKey;
+
+          const decryptedKey = decryptWithRSA(data.encryptedKey, privateKey);
+          globalDecryptedKey = decryptedKey;
+          return decryptedKey;
         } catch (err) {
           console.error('Error fetching conversation key:', err);
         }
@@ -558,10 +601,7 @@
         if (!hasMoreMessages || isLoading) return;
 
         const key = await fetchConversationKey(conversationId, publicKey);
-        console.log('Fetched conversation key:', key);
 
-        const decryptedKey = decryptWithRSA(key, privateKey);
-        console.log('Decrypted key:', decryptedKey);
         isLoading = true;
 
         try {
@@ -584,7 +624,7 @@
                 'message',
                 msg.sender?._id === myId ? 'sent' : 'received'
               );
-              messageDiv.textContent = decryptMessage(msg.text, decryptedKey);
+              messageDiv.textContent = decryptMessage(msg.text, key);
               messagesContainer.prepend(messageDiv);
             });
             //scroll to bottom of messages container
@@ -658,14 +698,12 @@
 
         try {
           // Fetch the conversation key
-          let key = await fetchConversationKey(conversationId, publicKey);
-          console.log('Fetched conversation key:', key);
-
-          key = decryptWithRSA(key, privateKey);
-          console.log('Decrypted key:', key);
 
           // Encrypt the message
-          const encryptedMessage = encryptMessage(rawMessage, key);
+          const encryptedMessage = encryptMessage(
+            rawMessage,
+            globalDecryptedKey
+          );
           console.log('Sending encrypted message:', encryptedMessage);
 
           // Send message via WebSocket
@@ -689,6 +727,7 @@
           alert('Failed to send message. Please try again.');
         }
       }
+
       socket.on('receiveMessage', ({ sender, message }) => {
         displayMessage(sender, message);
       });
@@ -701,9 +740,7 @@
           sender === socket.id ? 'sent' : 'received'
         );
 
-        const key = await fetchConversationKey(globalConversationId, publicKey);
-        const decryptedKey = decryptWithRSA(key, privateKey);
-        message = decryptMessage(message, decryptedKey);
+        message = decryptMessage(message, globalDecryptedKey);
 
         messageDiv.textContent = message;
         messagesContainer.appendChild(messageDiv);

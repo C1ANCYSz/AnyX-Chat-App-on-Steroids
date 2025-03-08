@@ -38,7 +38,14 @@ exports.getConversationKey = async (req, res, next) => {
     const { publicKey } = req.body;
 
     const conversation = await Conversation.findById(id);
+
     if (!conversation) return next(new AppError('Conversation not found', 404));
+
+    if (!conversation.members.includes(req.user._id)) {
+      return next(
+        new AppError('Unauthorized access to this conversation', 403)
+      );
+    }
 
     // Decrypt AES key with server's private key
     const decryptedKey = decryptWithRSA(conversation.key, privateKey);
