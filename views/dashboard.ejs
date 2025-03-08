@@ -322,21 +322,49 @@
 
     <script src="/js/node-rsa-browser.js"></script>
     <script src="/js/dashboard.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
 
     <script>
-      // Function to generate RSA keys
-      // Generate RSA keys
+      const socket = io();
+
+      socket.on('connect', () => {
+        console.log('Connected to server');
+      });
+
+      function joinConversation(conversationId) {
+        if (!conversationId) {
+          alert('Please enter a conversation ID!');
+          return;
+        }
+
+        socket.emit('joinConversation', conversationId);
+        console.log(`Joined conversation: ${conversationId}`);
+      }
+
       function generateRSAKeys() {
         const key = new NodeRSA({ b: 2048 });
 
-        const publicKey = key.exportKey('pkcs8-public-pem');
-        const privateKey = key.exportKey('pkcs8-private-pem');
-
-        return { publicKey, privateKey };
+        return {
+          publicKey: key.exportKey('pkcs8-public-pem'),
+          privateKey: key.exportKey('pkcs8-private-pem'),
+        };
       }
 
-      // Store keys in variables
       const { publicKey, privateKey } = generateRSAKeys();
+
+      function encryptMessage(message, key) {
+        return CryptoJS.AES.encrypt(message, key).toString();
+      }
+
+      function decryptMessage(cipherText, key) {
+        try {
+          const bytes = CryptoJS.AES.decrypt(cipherText, key);
+          return bytes.toString(CryptoJS.enc.Utf8);
+        } catch (err) {
+          return '[Decryption failed]';
+        }
+      }
 
       function decryptWithRSA(encryptedData, privateKey) {
         try {
@@ -373,9 +401,9 @@
         const inputArea = document.createElement('div');
         inputArea.classList.add('input-area');
         inputArea.innerHTML = `
-          <input type="text" onkeydown="handleEnter(event, '${conversationId}')" id="messageInput" placeholder="Type a message..." />
-          <button onclick="sendMessage('${conversationId}')">Send</button>
-        `;
+            <input type="text" onkeydown="handleEnter(event, '${conversationId}')" id="messageInput" placeholder="Type a message..." />
+            <button onclick="sendMessage('${conversationId}')">Send</button>
+          `;
         if (!convo.querySelector('.input-area')) {
           convo.appendChild(inputArea);
         }
@@ -406,6 +434,8 @@
         return messageTime.toLocaleDateString(); // Show full date for older messages
       }
 
+      let globalConversationId;
+
       async function loadConversations() {
         console.log('Loading conversations...');
         if (loading || !hasMore) return;
@@ -430,39 +460,46 @@
             userDiv.dataset.id = convo.conversationId;
 
             userDiv.innerHTML = `
-        <div class="horiFlex">
-          <div class="nameAndImage">
-            <img class="userImg" src="${
-              convo.otherUserImage
-            }" alt="User Image" />
-            <div class="lastMessageAndName">
-              <span class="username">@${convo.otherUsername}</span>
-              <p class="lastMessage">${convo.lastMessage}</p>
+          <div class="horiFlex">
+            <div class="nameAndImage">
+              <img class="userImg" src="${
+                convo.otherUserImage
+              }" alt="User Image" />
+              <div class="lastMessageAndName">
+                <span class="username">@${convo.otherUsername}</span>
+                <p class="lastMessage">${convo.lastMessage}</p>
+              </div>
             </div>
           </div>
-        </div>
-        <div class="ago">
-          <span class="time">${formatTime(convo.lastMessageTime)}</span>
-        </div>
-      `;
+          <div class="ago">
+            <span class="time">${formatTime(convo.lastMessageTime)}</span>
+          </div>
+        `;
 
             // Handle active user click
             userDiv.addEventListener('click', () => {
-              document
-                .querySelectorAll('.user')
-                .forEach((u) => u.classList.remove('active'));
-              userDiv.classList.add('active');
+              if (!userDiv.classList.contains('active')) {
+                document
+                  .querySelectorAll('.user')
+                  .forEach((u) => u.classList.remove('active'));
+                userDiv.classList.add('active');
 
-              const conversationId = convo.conversationId;
+                const conversationId = convo.conversationId;
+                globalConversationId = conversationId;
 
-              // Switch conversation and reset messages
-              switchConversation(conversationId);
+                console.log('Switching to conversation:', conversationId);
 
-              // Scroll to bottom after loading initial messages
-              messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                // Switch conversation and reset messages
+                switchConversation(conversationId);
 
-              // Append textarea for new messages
-              appendTextarea(convo.conversationId);
+                joinConversation(conversationId);
+
+                // Scroll to bottom after loading initial messages
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+                // Append textarea for new messages
+                appendTextarea(convo.conversationId);
+              }
             });
 
             userList.appendChild(userDiv);
@@ -487,10 +524,10 @@
       });
 
       function switchConversation(conversationId) {
-        messagesContainer.innerHTML = ''; // Clear previous messages
-        messagesPage = 1; // Reset pagination
-        hasMoreMessages = true; // Reset the flag
-        fetchMessages(conversationId); // Fetch new messages
+        messagesContainer.innerHTML = '';
+        messagesPage = 1;
+        hasMoreMessages = true;
+        fetchMessages(conversationId);
       }
 
       async function fetchConversationKey(convoId, publicKey) {
@@ -547,7 +584,7 @@
                 'message',
                 msg.sender?._id === myId ? 'sent' : 'received'
               );
-              messageDiv.textContent = msg.text;
+              messageDiv.textContent = decryptMessage(msg.text, decryptedKey);
               messagesContainer.prepend(messageDiv);
             });
             //scroll to bottom of messages container
@@ -613,42 +650,64 @@
           return;
         }
 
-        const message = messageInput.value.trim();
-        console.log('Sending message:', message);
-
-        if (!message) {
+        const rawMessage = messageInput.value.trim();
+        if (!rawMessage) {
           alert('Message cannot be empty!');
           return;
         }
 
         try {
-          const res = await fetch(`/api/users/send-message/${conversationId}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ message }),
+          // Fetch the conversation key
+          let key = await fetchConversationKey(conversationId, publicKey);
+          console.log('Fetched conversation key:', key);
+
+          key = decryptWithRSA(key, privateKey);
+          console.log('Decrypted key:', key);
+
+          // Encrypt the message
+          const encryptedMessage = encryptMessage(rawMessage, key);
+          console.log('Sending encrypted message:', encryptedMessage);
+
+          // Send message via WebSocket
+          socket.emit('sendMessage', {
+            conversationId,
+            message: encryptedMessage,
           });
 
-          if (!res.ok) {
-            throw new Error('Failed to send message');
-          }
-
-          const newMessage = await res.json();
-
-          messageInput.value = '';
-
+          // Display the message immediately in the UI
           const messagesContainer = document.querySelector('.messages');
           const messageDiv = document.createElement('div');
           messageDiv.classList.add('message', 'sent');
-          messageDiv.textContent = newMessage.text;
+          messageDiv.textContent = rawMessage; // Show plaintext message
           messagesContainer.appendChild(messageDiv);
 
+          // Clear the input and scroll to the bottom
+          messageInput.value = '';
           messagesContainer.scrollTop = messagesContainer.scrollHeight;
         } catch (error) {
           console.error('Error sending message:', error);
           alert('Failed to send message. Please try again.');
         }
+      }
+      socket.on('receiveMessage', ({ sender, message }) => {
+        displayMessage(sender, message);
+      });
+
+      async function displayMessage(sender, message) {
+        const messagesContainer = document.querySelector('.messages');
+        const messageDiv = document.createElement('div');
+        messageDiv.classList.add(
+          'message',
+          sender === socket.id ? 'sent' : 'received'
+        );
+
+        const key = await fetchConversationKey(globalConversationId, publicKey);
+        const decryptedKey = decryptWithRSA(key, privateKey);
+        message = decryptMessage(message, decryptedKey);
+
+        messageDiv.textContent = message;
+        messagesContainer.appendChild(messageDiv);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
       }
 
       newChatButton.addEventListener('click', () => {
@@ -682,11 +741,11 @@
           searchResults.innerHTML = users
             .map(
               (user) => `
-      <div data-id="${user.id}">
-        ${user.username}
-        <img src="${user.image}" alt="User Image" />
-      </div>
-    `
+        <div data-id="${user.id}">
+          ${user.username}
+          <img src="${user.image}" alt="User Image" />
+        </div>
+      `
             )
             .join('');
         } catch (error) {

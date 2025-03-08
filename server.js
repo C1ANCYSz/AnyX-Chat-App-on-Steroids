@@ -21,7 +21,22 @@ mongoose
 
 // Socket.io logic
 io.on('connection', (socket) => {
-  console.log('A user connected');
+  console.log('A user connected: ' + socket.id);
+
+  socket.on('joinConversation', (conversationId) => {
+    socket.join(conversationId);
+    console.log(`User ${socket.id} joined conversation ${conversationId}`);
+  });
+
+  socket.on('sendMessage', ({ conversationId, message }) => {
+    console.log(`Message in ${conversationId}: ${message}`);
+
+    // Emit the message to everyone in the room (except sender)
+    socket.to(conversationId).emit('receiveMessage', {
+      sender: socket.id,
+      message,
+    });
+  });
 
   socket.on('chat message', async (encryptedMsg) => {
     try {
