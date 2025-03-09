@@ -104,24 +104,55 @@
       .message {
         margin-bottom: 10px;
         padding: 10px;
+
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+      }
+
+      .message p {
+        margin: 0;
+        padding: 10px;
         border-radius: 5px;
         max-width: 70%;
       }
 
-      .message.sent {
-        background: rebeccapurple;
+      .message-actions {
+        display: flex;
+        flex-direction: row;
         color: white;
-        align-self: flex-end;
+        gap: 10px;
+        margin-left: 10px;
+        margin-right: 10px;
       }
 
+      /* Sent messages go to the right */
+      .message.sent {
+        justify-content: flex-end;
+        margin-left: auto;
+      }
+
+      /* Received messages stay on the left */
       .message.received {
+        justify-content: flex-start;
+        margin-right: auto;
+      }
+
+      .message.sent p {
+        background: rebeccapurple;
+        color: white;
+        width: fit-content;
+      }
+
+      .message.received p {
         background: #f1f1f1;
-        align-self: flex-start;
+        width: fit-content;
       }
 
       .input-area {
         display: flex;
         gap: 10px;
+        flex-direction: column;
       }
 
       .input-area input {
@@ -311,6 +342,51 @@
           display: none;
         }
       }
+      .hovered {
+        background-color: #f5f5f5;
+        color: #333;
+      }
+      .reply-preview {
+        background-color: #2d2d2d;
+        color: #fff;
+        border-top-left-radius: 8px;
+        border-top-right-radius: 8px;
+        padding: 12px;
+        border: 1px solid #444;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        margin-bottom: 10px;
+      }
+
+      .reply-preview .horiFlex {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .reply-preview .username {
+        font-weight: bold;
+        color: #9acd32;
+      }
+
+      .reply-preview p {
+        margin: 5px 0;
+        font-size: 14px;
+      }
+
+      .reply-preview .close-reply {
+        cursor: pointer;
+        color: #ff4d4d;
+        font-weight: bold;
+        font-size: 18px;
+        padding: 2px 6px;
+        border-radius: 50%;
+        transition: background 0.2s ease;
+      }
+
+      .reply-preview .close-reply:hover {
+        background: #ff4d4d;
+        color: #fff;
+      }
     </style>
   </head>
   <body>
@@ -356,6 +432,49 @@
         console.log('Connected to server');
       });
 
+      let publicKeyPem;
+      let privateKeyPem;
+
+      async function generateRSAKeys() {
+        const keyPair = await window.crypto.subtle.generateKey(
+          {
+            name: 'RSA-OAEP',
+            modulusLength: 2048,
+            publicExponent: new Uint8Array([1, 0, 1]),
+            hash: 'SHA-256',
+          },
+          true,
+          ['encrypt', 'decrypt']
+        );
+
+        publicKeyPem = await arrayBufferToPem(
+          await window.crypto.subtle.exportKey('spki', keyPair.publicKey),
+          'PUBLIC KEY'
+        );
+        privateKeyPem = await arrayBufferToPem(
+          await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey),
+          'PRIVATE KEY'
+        );
+      }
+
+      function arrayBufferToPem(buffer, label) {
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+        const formattedKey = base64.match(/.{1,64}/g).join('\n');
+        return `-----BEGIN ${label}-----\n${formattedKey}\n-----END ${label}-----`;
+      }
+
+      async function initializeKeysAndLoadConversations() {
+        await generateRSAKeys();
+
+        const publicKey = publicKeyPem;
+        const privateKey = privateKeyPem;
+
+        loadConversations();
+      }
+
+      initializeKeysAndLoadConversations();
+
+      /*
       function generateRSAKeys() {
         const key = new NodeRSA({ b: 2048 });
 
@@ -364,6 +483,10 @@
           privateKey: key.exportKey('pkcs8-private-pem'),
         };
       }
+
+     
+      const { publicKey, privateKey } = generateRSAKeys();
+     */
 
       function joinConversation(conversationId) {
         if (!conversationId) {
@@ -374,10 +497,6 @@
         socket.emit('joinConversation', conversationId);
         console.log(`Joined conversation: ${conversationId}`);
       }
-
-      const { publicKey, privateKey } = generateRSAKeys();
-
-      console.log('Public key:', publicKey);
 
       function encryptMessage(message, key) {
         return CryptoJS.AES.encrypt(message, key).toString();
@@ -427,8 +546,10 @@
         const inputArea = document.createElement('div');
         inputArea.classList.add('input-area');
         inputArea.innerHTML = `
+           <div style="display: flex; align-items: center; width: 100%; gap: 10px">
             <input type="text" onkeydown="handleEnter(event, '${conversationId}')" id="messageInput" placeholder="Type a message..." />
             <button onclick="sendMessage('${conversationId}')">Send</button>
+           </div>
           `;
         if (!convo.querySelector('.input-area')) {
           convo.appendChild(inputArea);
@@ -486,7 +607,7 @@
             userDiv.dataset.id = convo.conversationId;
             const key = await fetchConversationKey(
               convo.conversationId,
-              publicKey
+              publicKeyPem
             );
             userDiv.innerHTML = `
           <div class="horiFlex">
@@ -589,7 +710,7 @@
 
           console.log('Fetched conversation key:', data.encryptedKey);
 
-          const decryptedKey = decryptWithRSA(data.encryptedKey, privateKey);
+          const decryptedKey = decryptWithRSA(data.encryptedKey, privateKeyPem);
           globalDecryptedKey = decryptedKey;
           return decryptedKey;
         } catch (err) {
@@ -600,7 +721,7 @@
       async function fetchMessages(conversationId) {
         if (!hasMoreMessages || isLoading) return;
 
-        const key = await fetchConversationKey(conversationId, publicKey);
+        const key = await fetchConversationKey(conversationId, publicKeyPem);
 
         isLoading = true;
 
@@ -620,11 +741,73 @@
           if (conversation.messages.length > 0) {
             conversation.messages.forEach((msg) => {
               const messageDiv = document.createElement('div');
+              const messageContent = document.createElement('p');
+              const actionsDiv = document.createElement('div');
+              actionsDiv.classList.add('message-actions');
+
+              const replyBtn = document.createElement('div');
+              replyBtn.classList.add('action-btn');
+              replyBtn.textContent = '↩'; // Reply icon
+
+              replyBtn.addEventListener('click', () => {
+                const messageInput = document.getElementById('messageInput');
+                const inputArea = document.querySelector('.input-area');
+                const existingPreview =
+                  document.querySelector('.reply-preview');
+
+                // Check if the same message is already being replied to
+                if (existingPreview && existingPreview.dataset.id === msg._id) {
+                  return; // Do nothing if already replying to the same message
+                }
+
+                // Remove the existing preview if replying to a different message
+                if (existingPreview) {
+                  existingPreview.remove();
+                }
+
+                // Create new reply preview
+                const replyPreview = document.createElement('div');
+                replyPreview.classList.add('reply-preview');
+                replyPreview.dataset.id = msg._id; // Store message ID for comparison
+                replyPreview.innerHTML = `
+    <div class="horiFlex">
+      <p>replying to:</p>
+      <span class="username">@${msg.sender.username}</span>
+      <span class="close-reply">❌</span>
+    </div>
+    <p>${decryptMessage(msg.text, key)}</p>
+  `;
+
+                // Handle dismissing the reply preview
+                replyPreview
+                  .querySelector('.close-reply')
+                  .addEventListener('click', () => {
+                    replyPreview.remove();
+                  });
+
+                inputArea.prepend(replyPreview);
+                messageInput.focus();
+              });
+
+              const deleteBtn = document.createElement('div');
+              deleteBtn.classList.add('action-btn');
+              deleteBtn.textContent = '🗑'; // Delete icon
               messageDiv.classList.add(
                 'message',
                 msg.sender?._id === myId ? 'sent' : 'received'
               );
-              messageDiv.textContent = decryptMessage(msg.text, key);
+              messageDiv.dataset.id = msg._id;
+              messageContent.innerHTML = `${decryptMessage(msg.text, key)}`;
+              actionsDiv.appendChild(replyBtn);
+              actionsDiv.appendChild(deleteBtn);
+
+              messageDiv.classList.contains('sent')
+                ? (messageDiv.appendChild(actionsDiv),
+                  messageDiv.appendChild(messageContent))
+                : (messageDiv.appendChild(messageContent),
+                  messageDiv.appendChild(actionsDiv));
+
+              messageDiv.addEventListener('hover', () => {});
               messagesContainer.prepend(messageDiv);
             });
             //scroll to bottom of messages container
@@ -716,7 +899,10 @@
           const messagesContainer = document.querySelector('.messages');
           const messageDiv = document.createElement('div');
           messageDiv.classList.add('message', 'sent');
-          messageDiv.textContent = rawMessage; // Show plaintext message
+          const messageContent = document.createElement('p');
+          messageContent.textContent = rawMessage;
+          messageDiv.appendChild(messageContent);
+
           messagesContainer.appendChild(messageDiv);
 
           // Clear the input and scroll to the bottom
@@ -741,8 +927,10 @@
         );
 
         message = decryptMessage(message, globalDecryptedKey);
+        const messageContent = document.createElement('p');
+        messageContent.textContent = message;
+        messageDiv.appendChild(messageContent);
 
-        messageDiv.textContent = message;
         messagesContainer.appendChild(messageDiv);
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
       }
@@ -802,8 +990,6 @@
           searchInput.value = '';
         }
       });
-
-      loadConversations();
     </script>
   </body>
 </html>
