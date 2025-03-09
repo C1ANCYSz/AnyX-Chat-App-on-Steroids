@@ -7,6 +7,7 @@ const messageSchema = new mongoose.Schema({
     ref: 'Conversation',
     required: true,
   },
+  replyingTo: { type: mongoose.Schema.Types.ObjectId, ref: 'Message' },
   text: { type: String, required: true },
   timestamp: { type: Date, default: Date.now },
 });

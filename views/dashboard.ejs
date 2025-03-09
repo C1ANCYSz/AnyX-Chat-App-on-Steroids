@@ -73,13 +73,12 @@
         flex: 2;
         display: flex;
         flex-direction: column;
-        padding: 10px;
       }
 
       .chat-header {
         padding: 10px;
         background: rgba(255, 255, 255, 0.1);
-        border-radius: 5px;
+
         text-align: center;
         font-weight: bold;
         margin-bottom: 10px;
@@ -98,12 +97,10 @@
         padding: 10px;
         display: flex;
         flex-direction: column;
-        margin-bottom: 20px;
       }
 
       .message {
         margin-bottom: 10px;
-        padding: 10px;
 
         display: flex;
         flex-direction: row;
@@ -113,7 +110,7 @@
       .message p {
         margin: 0;
         padding: 10px;
-        border-radius: 5px;
+        border-radius: 8px;
         max-width: 70%;
       }
 
@@ -130,12 +127,20 @@
       .message.sent {
         justify-content: flex-end;
         margin-left: auto;
+        margin-bottom: 10px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
       }
 
       /* Received messages stay on the left */
       .message.received {
         justify-content: flex-start;
         margin-right: auto;
+        margin-bottom: 10px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
       }
 
       .message.sent p {
@@ -153,6 +158,9 @@
         display: flex;
         gap: 10px;
         flex-direction: column;
+        background-color: #222;
+        padding: 10px; /* top left bottom right */
+        border-bottom-right-radius: 8px;
       }
 
       .input-area input {
@@ -301,6 +309,12 @@
         justify-content: space-between;
       }
 
+      .replyFlex {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-between;
+      }
+
       .nameAndImage {
         display: flex;
         align-items: flex-start;
@@ -347,14 +361,14 @@
         color: #333;
       }
       .reply-preview {
-        background-color: #2d2d2d;
+        background-color: #111;
         color: #fff;
-        border-top-left-radius: 8px;
-        border-top-right-radius: 8px;
+        border-radius: 8px;
         padding: 12px;
         border: 1px solid #444;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         margin-bottom: 10px;
+        border-left: 3px solid rebeccapurple;
       }
 
       .reply-preview .horiFlex {
@@ -365,7 +379,7 @@
 
       .reply-preview .username {
         font-weight: bold;
-        color: #9acd32;
+        color: rebeccapurple;
       }
 
       .reply-preview p {
@@ -386,6 +400,23 @@
       .reply-preview .close-reply:hover {
         background: #ff4d4d;
         color: #fff;
+      }
+      .reply-preview-box {
+        background-color: #444;
+        color: #ccc;
+        padding: 8px;
+        border-left: 3px solid #007bff;
+        border-radius: 5px;
+
+        font-size: 0.9em;
+        max-width: 80%;
+        word-wrap: break-word;
+      }
+      .actionAndMessage {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
       }
     </style>
   </head>
@@ -475,18 +506,18 @@
       initializeKeysAndLoadConversations();
 
       /*
-      function generateRSAKeys() {
-        const key = new NodeRSA({ b: 2048 });
+          function generateRSAKeys() {
+            const key = new NodeRSA({ b: 2048 });
 
-        return {
-          publicKey: key.exportKey('pkcs8-public-pem'),
-          privateKey: key.exportKey('pkcs8-private-pem'),
-        };
-      }
+            return {
+              publicKey: key.exportKey('pkcs8-public-pem'),
+              privateKey: key.exportKey('pkcs8-private-pem'),
+            };
+          }
 
-     
-      const { publicKey, privateKey } = generateRSAKeys();
-     */
+
+          const { publicKey, privateKey } = generateRSAKeys();
+         */
 
       function joinConversation(conversationId) {
         if (!conversationId) {
@@ -546,11 +577,11 @@
         const inputArea = document.createElement('div');
         inputArea.classList.add('input-area');
         inputArea.innerHTML = `
-           <div style="display: flex; align-items: center; width: 100%; gap: 10px">
-            <input type="text" onkeydown="handleEnter(event, '${conversationId}')" id="messageInput" placeholder="Type a message..." />
-            <button onclick="sendMessage('${conversationId}')">Send</button>
-           </div>
-          `;
+               <div style="display: flex; align-items: center; width: 100%; gap: 10px">
+                <input type="text" onkeydown="handleEnter(event, '${conversationId}')" id="messageInput" placeholder="Type a message..." />
+                <button onclick="sendMessage('${conversationId}')">Send</button>
+               </div>
+              `;
         if (!convo.querySelector('.input-area')) {
           convo.appendChild(inputArea);
         }
@@ -610,24 +641,24 @@
               publicKeyPem
             );
             userDiv.innerHTML = `
-          <div class="horiFlex">
-            <div class="nameAndImage">
-              <img class="userImg" src="${
-                convo.otherUserImage
-              }" alt="User Image" />
-              <div class="lastMessageAndName">
-                <span class="username">@${convo.otherUsername}</span>
-                <p class="lastMessage">${decryptMessage(
-                  convo.lastMessage,
-                  key
-                )}</p>
+              <div class="horiFlex">
+                <div class="nameAndImage">
+                  <img class="userImg" src="${
+                    convo.otherUserImage
+                  }" alt="User Image" />
+                  <div class="lastMessageAndName">
+                    <span class="username">@${convo.otherUsername}</span>
+                    <p class="lastMessage">${decryptMessage(
+                      convo.lastMessage,
+                      key
+                    )}</p>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-          <div class="ago">
-            <span class="time">${formatTime(convo.lastMessageTime)}</span>
-          </div>
-        `;
+              <div class="ago">
+                <span class="time">${formatTime(convo.lastMessageTime)}</span>
+              </div>
+            `;
 
             // Handle active user click
             userDiv.addEventListener('click', () => {
@@ -638,12 +669,12 @@
                 userDiv.classList.add('active');
 
                 document.querySelector('.chat-header').innerHTML = `
-          <img  src="${convo.otherUserImage}" alt="User Image" />
-          <span class="username">@${convo.otherUsername}</span>
+              <img  src="${convo.otherUserImage}" alt="User Image" />
+              <span class="username">@${convo.otherUsername}</span>
 
 
 
-        `;
+            `;
                 const conversationId = convo.conversationId;
                 globalConversationId = conversationId;
 
@@ -745,6 +776,30 @@
               const actionsDiv = document.createElement('div');
               actionsDiv.classList.add('message-actions');
 
+              // Handle reply preview
+              if (msg.replyingTo) {
+                const replyPreviewDiv = document.createElement('div');
+                replyPreviewDiv.classList.add('reply-preview-box');
+
+                // Find the original replied message
+                const repliedMessage = conversation.messages.find(
+                  (m) => m._id === msg.replyingTo
+                );
+
+                if (repliedMessage) {
+                  replyPreviewDiv.innerHTML = `
+              <div class="reply-preview-content">
+                <strong>@${repliedMessage.sender.username}</strong>: 
+                ${decryptMessage(repliedMessage.text, key)}
+              </div>
+            `;
+                } else {
+                  replyPreviewDiv.innerHTML = `<div class="reply-preview-content"><strong>Replying to</strong>: [Message not found]</div>`;
+                }
+
+                messageDiv.appendChild(replyPreviewDiv);
+              }
+
               const replyBtn = document.createElement('div');
               replyBtn.classList.add('action-btn');
               replyBtn.textContent = '↩'; // Reply icon
@@ -755,30 +810,25 @@
                 const existingPreview =
                   document.querySelector('.reply-preview');
 
-                // Check if the same message is already being replied to
                 if (existingPreview && existingPreview.dataset.id === msg._id) {
-                  return; // Do nothing if already replying to the same message
+                  return;
                 }
 
-                // Remove the existing preview if replying to a different message
                 if (existingPreview) {
                   existingPreview.remove();
                 }
 
-                // Create new reply preview
                 const replyPreview = document.createElement('div');
                 replyPreview.classList.add('reply-preview');
-                replyPreview.dataset.id = msg._id; // Store message ID for comparison
+                replyPreview.dataset.id = msg._id;
                 replyPreview.innerHTML = `
-    <div class="horiFlex">
-      <p>replying to:</p>
-      <span class="username">@${msg.sender.username}</span>
-      <span class="close-reply">❌</span>
-    </div>
-    <p>${decryptMessage(msg.text, key)}</p>
-  `;
+            <div class="replyFlex">
+              <span class="username">@${msg.sender.username}</span>
+              <span class="close-reply">❌</span>
+            </div>
+            <p>${decryptMessage(msg.text, key)}</p>
+          `;
 
-                // Handle dismissing the reply preview
                 replyPreview
                   .querySelector('.close-reply')
                   .addEventListener('click', () => {
@@ -800,24 +850,25 @@
               messageContent.innerHTML = `${decryptMessage(msg.text, key)}`;
               actionsDiv.appendChild(replyBtn);
               actionsDiv.appendChild(deleteBtn);
+              const actionAndMessage = document.createElement('div');
+              actionAndMessage.classList.add('actionAndMessage');
 
               messageDiv.classList.contains('sent')
-                ? (messageDiv.appendChild(actionsDiv),
-                  messageDiv.appendChild(messageContent))
-                : (messageDiv.appendChild(messageContent),
-                  messageDiv.appendChild(actionsDiv));
+                ? (actionAndMessage.appendChild(actionsDiv),
+                  actionAndMessage.appendChild(messageContent))
+                : (actionAndMessage.appendChild(messageContent),
+                  actionAndMessage.appendChild(actionsDiv));
 
-              messageDiv.addEventListener('hover', () => {});
+              messageDiv.appendChild(actionAndMessage);
               messagesContainer.prepend(messageDiv);
             });
-            //scroll to bottom of messages container
+
+            // Scroll to bottom of messages container
             if (messagesPage === 1) {
               messagesContainer.scrollTop = messagesContainer.scrollHeight;
             } else {
-              // Preserve the scroll position
               const previousScrollHeight = messagesContainer.scrollHeight;
 
-              // After adding new messages, adjust scroll position
               setTimeout(() => {
                 const newScrollHeight = messagesContainer.scrollHeight;
                 messagesContainer.scrollTop +=
@@ -841,7 +892,6 @@
           isLoading = false;
         }
       }
-
       // Infinite scroll for messages
       messagesContainer.addEventListener('scroll', () => {
         if (
@@ -867,7 +917,6 @@
 
       async function sendMessage(conversationId) {
         const messageInput = document.getElementById('messageInput');
-
         if (!messageInput) {
           console.error('Message input field not found!');
           return;
@@ -880,61 +929,208 @@
         }
 
         try {
-          // Fetch the conversation key
-
-          // Encrypt the message
           const encryptedMessage = encryptMessage(
             rawMessage,
             globalDecryptedKey
           );
           console.log('Sending encrypted message:', encryptedMessage);
 
+          const replyingTo = document.querySelector('.reply-preview');
+          const messageId = replyingTo?.dataset.id;
+
           // Send message via WebSocket
           socket.emit('sendMessage', {
             conversationId,
             message: encryptedMessage,
+            replyingTo: messageId || undefined,
           });
 
           // Display the message immediately in the UI
           const messagesContainer = document.querySelector('.messages');
+          if (!messagesContainer) {
+            console.error('Messages container not found!');
+            return;
+          }
+
           const messageDiv = document.createElement('div');
           messageDiv.classList.add('message', 'sent');
+
+          // Show reply preview above the message
+          if (replyingTo && messageId) {
+            const replyPreviewDiv = document.createElement('div');
+            replyPreviewDiv.classList.add('reply-preview-box');
+
+            const username =
+              replyingTo.querySelector('.username')?.textContent ||
+              'Unknown user';
+            const messageText =
+              replyingTo.querySelector('p')?.textContent || 'Replied message';
+
+            replyPreviewDiv.innerHTML = `<strong>${username}</strong>: ${messageText}`;
+            messageDiv.appendChild(replyPreviewDiv);
+          }
+
+          // Add the sent message
           const messageContent = document.createElement('p');
           messageContent.textContent = rawMessage;
-          messageDiv.appendChild(messageContent);
 
+          // Add action buttons next to the message
+          const actionContainer = document.createElement('div');
+          actionContainer.classList.add('message-actions');
+
+          const deleteBtn = document.createElement('div');
+          deleteBtn.classList.add('action-btn');
+          deleteBtn.textContent = '🗑';
+          deleteBtn.addEventListener('click', () => {
+            messageDiv.remove();
+          });
+
+          const replyBtn = document.createElement('div');
+          replyBtn.classList.add('action-btn');
+          replyBtn.textContent = '↩';
+          replyBtn.addEventListener('click', () => {
+            messageInput.value = rawMessage;
+            messageInput.focus();
+          });
+
+          actionContainer.appendChild(deleteBtn);
+          actionContainer.appendChild(replyBtn);
+
+          // Create wrapper for message and
+          const actionAndMessage = document.createElement('div');
+          actionAndMessage.classList.add('actionAndMessage');
+
+          // Append elements based on message type
+
+          messageDiv.classList.contains('sent')
+            ? (actionAndMessage.appendChild(actionContainer),
+              actionAndMessage.appendChild(messageContent))
+            : (actionAndMessage.appendChild(messageContent),
+              actionAndMessage.appendChild(actionContainer));
+
+          messageDiv.appendChild(actionAndMessage);
           messagesContainer.appendChild(messageDiv);
 
-          // Clear the input and scroll to the bottom
-          messageInput.value = '';
+          // Scroll to the bottom
           messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+          // Handle the server response to attach message ID
+          socket.once('messageSent', ({ messageId }) => {
+            messageDiv.dataset.id = messageId;
+          });
+
+          // Handle new incoming messages
+
+          // Clear input and hide reply preview
+          messageInput.value = '';
+          if (replyingTo) {
+            replyingTo.remove();
+          }
         } catch (error) {
           console.error('Error sending message:', error);
           alert('Failed to send message. Please try again.');
         }
       }
 
-      socket.on('receiveMessage', ({ sender, message }) => {
-        displayMessage(sender, message);
-      });
+      socket.on(
+        'receiveMessage',
+        ({ sender, message, messageId, replyingTo, username }) => {
+          // Avoid rendering duplicate messages
+          if (document.querySelector(`[data-id="${messageId}"]`)) return;
+          displayMessage(sender, message, replyingTo, messageId, username);
+        }
+      );
 
-      async function displayMessage(sender, message) {
+      async function displayMessage(
+        sender,
+        message,
+        replyingTo,
+        messageId,
+        username
+      ) {
         const messagesContainer = document.querySelector('.messages');
+        if (!messagesContainer) {
+          console.error('Messages container not found!');
+          return;
+        }
+
         const messageDiv = document.createElement('div');
         messageDiv.classList.add(
           'message',
           sender === socket.id ? 'sent' : 'received'
         );
+        messageDiv.dataset.id = messageId;
 
+        // Show reply preview
+        if (replyingTo) {
+          const replyPreviewDiv = document.createElement('div');
+          replyPreviewDiv.classList.add('reply-preview-box');
+
+          const repliedMessage = document.querySelector(
+            `[data-id="${replyingTo}"]`
+          );
+          if (repliedMessage) {
+            const repliedUsername = username || 'Unknown user';
+            const repliedText =
+              repliedMessage.querySelector('p')?.textContent ||
+              'Replied message';
+
+            replyPreviewDiv.innerHTML = `<strong>${repliedUsername}</strong>: ${repliedText}`;
+          } else {
+            replyPreviewDiv.innerHTML = `<strong>Replying to</strong>: [Message not found]`;
+          }
+
+          messageDiv.appendChild(replyPreviewDiv);
+        }
+
+        // Decrypt and display the message content
         message = decryptMessage(message, globalDecryptedKey);
         const messageContent = document.createElement('p');
         messageContent.textContent = message;
-        messageDiv.appendChild(messageContent);
 
+        // Add action buttons (delete and reply)
+        const actionContainer = document.createElement('div');
+        actionContainer.classList.add('message-actions');
+
+        const deleteBtn = document.createElement('div');
+        deleteBtn.classList.add('action-btn');
+        deleteBtn.textContent = '🗑';
+        deleteBtn.addEventListener('click', () => {
+          messageDiv.remove();
+        });
+
+        const replyBtn = document.createElement('div');
+        replyBtn.classList.add('action-btn');
+        replyBtn.textContent = '↩';
+        replyBtn.addEventListener('click', () => {
+          const messageInput = document.getElementById('messageInput');
+          if (messageInput) {
+            messageInput.value = message;
+            messageInput.focus();
+          }
+        });
+
+        actionContainer.appendChild(deleteBtn);
+        actionContainer.appendChild(replyBtn);
+
+        // Create wrapper for message and actions
+        const actionAndMessage = document.createElement('div');
+        actionAndMessage.classList.add('actionAndMessage');
+
+        messageDiv.classList.contains('sent')
+          ? (actionAndMessage.appendChild(actionContainer),
+            actionAndMessage.appendChild(messageContent))
+          : (actionAndMessage.appendChild(messageContent),
+            actionAndMessage.appendChild(actionContainer));
+
+        messageDiv.appendChild(actionAndMessage);
         messagesContainer.appendChild(messageDiv);
+
+        // Scroll to the bottom
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
       }
 
+      // This makes incoming and sent messages look the same, with consistent UI elements and interactions. Let me know if you’d like any tweaks! 🚀
       newChatButton.addEventListener('click', () => {
         chatSearch.style.display =
           chatSearch.style.display === 'none' ? 'block' : 'none';
@@ -966,11 +1162,11 @@
           searchResults.innerHTML = users
             .map(
               (user) => `
-        <div data-id="${user.id}">
-          ${user.username}
-          <img src="${user.image}" alt="User Image" />
-        </div>
-      `
+            <div data-id="${user.id}">
+              ${user.username}
+              <img src="${user.image}" alt="User Image" />
+            </div>
+          `
             )
             .join('');
         } catch (error) {

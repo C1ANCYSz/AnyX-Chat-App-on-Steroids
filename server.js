@@ -1,15 +1,17 @@
 const http = require('http');
 const { Server } = require('socket.io');
 const mongoose = require('mongoose');
+const jwt = require('jsonwebtoken');
+require('dotenv').config();
 
 const app = require('./app');
 const server = http.createServer(app);
 const io = new Server(server);
-const jwt = require('jsonwebtoken');
-require('dotenv').config();
 
 const Message = require('./models/Message');
 const Conversation = require('./models/Conversation');
+const User = require('./models/User');
+
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB connected'))
@@ -23,30 +25,61 @@ io.on('connection', (socket) => {
     console.log(`User ${socket.id} joined conversation ${conversationId}`);
   });
 
-  socket.on('sendMessage', async ({ conversationId, message }) => {
-    const sender = socket.handshake.headers.cookie
-      .split(';')
-      .find((cookie) => cookie.startsWith('jwt='))
-      .split('=')[1];
+  socket.on(
+    'sendMessage',
+    async ({ conversationId, message, replyingTo = undefined }) => {
+      try {
+        const cookie = socket.handshake.headers.cookie;
+        const token = cookie
+          ?.split('; ')
+          .find((c) => c.startsWith('jwt='))
+          ?.split('=')[1];
 
-    const decoded = jwt.verify(sender, process.env.JWT_SECRET);
+        if (!token) throw new Error('JWT token missing');
 
-    const newMessage = await Message.create({
-      text: message,
-      conversation: conversationId,
-      sender: decoded.id,
-    });
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const senderUser = await User.findById(decoded.id);
+        if (!senderUser) throw new Error('User not found');
 
-    const conversation = await Conversation.findById(conversationId);
+        const newMessage = await Message.create({
+          text: message,
+          conversation: conversationId,
+          sender: decoded.id,
+          replyingTo,
+        });
 
-    conversation.lastMessage = newMessage._id;
-    await conversation.save();
+        const conversation = await Conversation.findById(conversationId);
+        if (conversation) {
+          conversation.lastMessage = newMessage._id;
+          await conversation.save();
+        }
 
-    socket.to(conversationId).emit('receiveMessage', {
-      sender: socket.id,
-      message,
-    });
-  });
+        let repliedUsername = null;
+        if (replyingTo) {
+          const repliedMessage = await Message.findById(replyingTo).populate(
+            'sender'
+          );
+          repliedUsername = repliedMessage?.sender?.username || 'Unknown User';
+        }
+
+        socket.emit('messageSent', {
+          messageId: newMessage._id,
+          text: newMessage.text,
+        });
+
+        socket.to(conversationId).emit('receiveMessage', {
+          messageId: newMessage._id,
+          sender: decoded.id,
+          message,
+          replyingTo,
+          username: repliedUsername,
+        });
+      } catch (error) {
+        console.error('Error sending message:', error);
+        socket.emit('error', { message: 'Failed to send message' });
+      }
+    }
+  );
 
   socket.on('disconnect', () => {
     console.log('User disconnected');
