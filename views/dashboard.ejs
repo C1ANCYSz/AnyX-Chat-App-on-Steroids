@@ -569,7 +569,8 @@
               const { publicKey, privateKey } = generateRSAKeys();
              */
 
-      function joinConversation(conversationId) {
+      function joinConversation() {
+        const conversationId = globalConversationId;
         if (!conversationId) {
           alert('Please enter a conversation ID!');
           return;
@@ -622,14 +623,18 @@
       let hasMoreMessages = true;
       let isLoading = false;
 
+      let globalDecryptedKey;
+      let globalMyId;
+      let globalConversationId;
+
       function appendTextarea(conversationId) {
         const convo = document.querySelector('.convo');
         const inputArea = document.createElement('div');
         inputArea.classList.add('input-area');
         inputArea.innerHTML = `
                    <div style="display: flex; align-items: center; width: 100%; gap: 10px">
-                    <input type="text" onkeydown="handleEnter(event, '${conversationId}')" id="messageInput" placeholder="Type a message..." />
-                    <button onclick="sendMessage('${conversationId}')">Send</button>
+                    <input type="text" onkeydown="handleEnter(event)" id="messageInput" placeholder="Type a message..." />
+                    <button onclick="sendMessage()">Send</button>
                    </div>
                   `;
         if (!convo.querySelector('.input-area')) {
@@ -637,9 +642,9 @@
         }
       }
 
-      function handleEnter(event, conversationId) {
+      function handleEnter(event) {
         if (event.key === 'Enter') {
-          sendMessage(conversationId);
+          sendMessage();
         }
       }
 
@@ -662,8 +667,6 @@
         return messageTime.toLocaleDateString(); // Show full date for older messages
       }
 
-      let globalConversationId;
-
       async function loadConversations() {
         console.log('Loading conversations...');
         if (loading || !hasMore) return;
@@ -682,71 +685,12 @@
             return;
           }
 
-          data.forEach(async (convo) => {
-            const userDiv = document.createElement('div');
-            userDiv.classList.add('user');
-            userDiv.dataset.id = convo.conversationId;
-            const key = await fetchConversationKey(
-              convo.conversationId,
-              publicKeyPem
-            );
-            userDiv.innerHTML = `
-                  <div class="horiFlex">
-                    <div class="nameAndImage">
-                      <img class="userImg" src="${
-                        convo.otherUserImage
-                      }" alt="User Image" />
-                      <div class="lastMessageAndName">
-                        <span class="username">@${convo.otherUsername}</span>
-                        <p class="lastMessage">${decryptMessage(
-                          convo.lastMessage,
-                          key
-                        )}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="ago">
-                    <span class="time">${formatTime(
-                      convo.lastMessageTime
-                    )}</span>
-                  </div>
-                `;
-
-            // Handle active user click
-            userDiv.addEventListener('click', () => {
-              if (!userDiv.classList.contains('active')) {
-                document
-                  .querySelectorAll('.user')
-                  .forEach((u) => u.classList.remove('active'));
-                userDiv.classList.add('active');
-
-                document.querySelector('.chat-header').innerHTML = `
-                  <img  src="${convo.otherUserImage}" alt="User Image" />
-                  <span class="username">@${convo.otherUsername}</span>
-
-
-
-                `;
-                const conversationId = convo.conversationId;
-                globalConversationId = conversationId;
-
-                console.log('Switching to conversation:', conversationId);
-
-                // Switch conversation and reset messages
-                switchConversation(conversationId);
-
-                joinConversation(conversationId);
-
-                // Scroll to bottom after loading initial messages
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-
-                // Append textarea for new messages
-                appendTextarea(convo.conversationId);
-              }
-            });
-
-            userList.appendChild(userDiv);
-          });
+          await Promise.all(
+            data.map(async (convo) => {
+              const userDiv = createUserDiv(convo);
+              userList.appendChild(userDiv);
+            })
+          );
 
           page++;
         } catch (error) {
@@ -754,6 +698,67 @@
         } finally {
           loading = false;
         }
+      }
+
+      function createUserDiv(convo) {
+        const userDiv = document.createElement('div');
+        userDiv.classList.add('user');
+        userDiv.dataset.id = convo.conversationId;
+
+        fetchConversationKey(convo.conversationId, publicKeyPem).then((key) => {
+          userDiv.innerHTML = `
+      <div class="horiFlex">
+        <div class="nameAndImage">
+          <img class="userImg" src="${convo.otherUserImage}" alt="User Image" />
+          <div class="lastMessageAndName">
+            <span class="username">@${convo.otherUsername}</span>
+            <p class="lastMessage">${decryptMessage(convo.lastMessage, key)}</p>
+          </div>
+        </div>
+      </div>
+      <div class="ago">
+        <span class="time">${formatTime(convo.lastMessageTime)}</span>
+      </div>
+    `;
+
+          userDiv.addEventListener('click', () =>
+            handleUserClick(userDiv, convo)
+          );
+        });
+
+        return userDiv;
+      }
+
+      function handleUserClick(userDiv, convo) {
+        if (userDiv.classList.contains('active')) return;
+
+        if (globalConversationId) {
+          leaveConversation();
+        }
+
+        document
+          .querySelectorAll('.user')
+          .forEach((u) => u.classList.remove('active'));
+        userDiv.classList.add('active');
+
+        document.querySelector('.chat-header').innerHTML = `
+    <img src="${convo.otherUserImage}" alt="User Image" />
+    <span class="username">@${convo.otherUsername}</span>
+  `;
+
+        globalConversationId = convo.conversationId;
+        console.log('Switching to conversation:', globalConversationId);
+
+        switchConversation(globalConversationId);
+        joinConversation();
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+        appendTextarea(convo.conversationId);
+      }
+
+      function leaveConversation() {
+        socket.emit('leaveConversation', globalConversationId);
+        console.log(`Left conversation: ${globalConversationId}`);
       }
 
       // Scroll to load more conversations
@@ -765,8 +770,6 @@
           loadConversations();
         }
       });
-      let globalDecryptedKey;
-      let globalMyId;
 
       function createActionButtons(msg, key) {
         const actionsDiv = document.createElement('div');
@@ -910,7 +913,7 @@
         }
       }
 
-      async function sendMessage(conversationId) {
+      async function sendMessage() {
         const messageInput = document.getElementById('messageInput');
         const rawMessage = messageInput.value.trim();
 
@@ -928,7 +931,7 @@
           const messageId = replyingTo?.dataset.id;
 
           socket.emit('sendMessage', {
-            conversationId,
+            conversationId: globalConversationId,
             message: encryptedMessage,
             replyingTo: messageId || undefined,
           });
@@ -941,14 +944,30 @@
         }
       }
 
-      socket.on('messageSent', ({ newMessage }) => {
-        addMessageToUI(newMessage, globalMyId, globalDecryptedKey, false, true);
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      socket.on('messageSent', ({ newMessage, conversationId }) => {
+        if (conversationId === globalConversationId) {
+          addMessageToUI(
+            newMessage,
+            globalMyId,
+            globalDecryptedKey,
+            false,
+            true
+          );
+          messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
       });
 
-      socket.on('receiveMessage', ({ newMessage }) => {
-        addMessageToUI(newMessage, globalMyId, globalDecryptedKey, false, true);
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      socket.on('receiveMessage', ({ newMessage, conversationId }) => {
+        if (conversationId === globalConversationId) {
+          addMessageToUI(
+            newMessage,
+            globalMyId,
+            globalDecryptedKey,
+            false,
+            true
+          );
+          messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
       });
 
       function switchConversation(conversationId) {
@@ -979,6 +998,7 @@
 
           const decryptedKey = decryptWithRSA(data.encryptedKey, privateKeyPem);
           globalDecryptedKey = decryptedKey;
+          console.log('active convo' + globalConversationId);
           return decryptedKey;
         } catch (err) {
           console.error('Error fetching conversation key:', err);

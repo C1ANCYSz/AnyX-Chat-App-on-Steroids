@@ -25,6 +25,11 @@ io.on('connection', (socket) => {
     console.log(`User ${socket.id} joined conversation ${conversationId}`);
   });
 
+  socket.on('leaveConversation', (conversationId) => {
+    socket.leave(conversationId);
+    console.log(`User ${socket.id} left conversation ${conversationId}`);
+  });
+
   socket.on('sendMessage', async ({ conversationId, message, replyingTo }) => {
     try {
       const cookie = socket.handshake.headers.cookie;
@@ -50,17 +55,20 @@ io.on('connection', (socket) => {
         { path: 'replyingTo', select: 'text sender', populate: 'sender' },
       ]);
 
-      console.log('populatedMessage: ' + populatedMessage);
       const conversation = await Conversation.findById(conversationId);
       if (conversation) {
         conversation.lastMessage = newMessage._id;
         await conversation.save();
       }
 
-      socket.emit('messageSent', { newMessage: populatedMessage });
-      socket
-        .to(conversationId)
-        .emit('receiveMessage', { newMessage: populatedMessage });
+      socket.emit('messageSent', {
+        newMessage: populatedMessage,
+        conversationId,
+      });
+      socket.to(conversationId).emit('receiveMessage', {
+        newMessage: populatedMessage,
+        conversationId,
+      });
     } catch (error) {
       console.error('Error sending message:', error);
       socket.emit('error', { message: 'Failed to send message' });
