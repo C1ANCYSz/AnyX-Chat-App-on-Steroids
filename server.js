@@ -25,61 +25,47 @@ io.on('connection', (socket) => {
     console.log(`User ${socket.id} joined conversation ${conversationId}`);
   });
 
-  socket.on(
-    'sendMessage',
-    async ({ conversationId, message, replyingTo = undefined }) => {
-      try {
-        const cookie = socket.handshake.headers.cookie;
-        const token = cookie
-          ?.split('; ')
-          .find((c) => c.startsWith('jwt='))
-          ?.split('=')[1];
+  socket.on('sendMessage', async ({ conversationId, message, replyingTo }) => {
+    try {
+      const cookie = socket.handshake.headers.cookie;
+      const token = cookie
+        ?.split('; ')
+        .find((c) => c.startsWith('jwt='))
+        ?.split('=')[1];
+      if (!token) throw new Error('JWT token missing');
 
-        if (!token) throw new Error('JWT token missing');
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const senderUser = await User.findById(decoded.id);
+      if (!senderUser) throw new Error('User not found');
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const senderUser = await User.findById(decoded.id);
-        if (!senderUser) throw new Error('User not found');
+      const newMessage = await Message.create({
+        text: message,
+        conversation: conversationId,
+        sender: decoded.id,
+        replyingTo,
+      });
 
-        const newMessage = await Message.create({
-          text: message,
-          conversation: conversationId,
-          sender: decoded.id,
-          replyingTo,
-        });
+      const populatedMessage = await newMessage.populate([
+        { path: 'sender', select: 'username image' },
+        { path: 'replyingTo', select: 'text sender', populate: 'sender' },
+      ]);
 
-        const conversation = await Conversation.findById(conversationId);
-        if (conversation) {
-          conversation.lastMessage = newMessage._id;
-          await conversation.save();
-        }
-
-        let repliedUsername = null;
-        if (replyingTo) {
-          const repliedMessage = await Message.findById(replyingTo).populate(
-            'sender'
-          );
-          repliedUsername = repliedMessage?.sender?.username || 'Unknown User';
-        }
-
-        socket.emit('messageSent', {
-          messageId: newMessage._id,
-          text: newMessage.text,
-        });
-
-        socket.to(conversationId).emit('receiveMessage', {
-          messageId: newMessage._id,
-          sender: decoded.id,
-          message,
-          replyingTo,
-          username: repliedUsername,
-        });
-      } catch (error) {
-        console.error('Error sending message:', error);
-        socket.emit('error', { message: 'Failed to send message' });
+      console.log('populatedMessage: ' + populatedMessage);
+      const conversation = await Conversation.findById(conversationId);
+      if (conversation) {
+        conversation.lastMessage = newMessage._id;
+        await conversation.save();
       }
+
+      socket.emit('messageSent', { newMessage: populatedMessage });
+      socket
+        .to(conversationId)
+        .emit('receiveMessage', { newMessage: populatedMessage });
+    } catch (error) {
+      console.error('Error sending message:', error);
+      socket.emit('error', { message: 'Failed to send message' });
     }
-  );
+  });
 
   socket.on('disconnect', () => {
     console.log('User disconnected');

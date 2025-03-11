@@ -503,21 +503,71 @@
         loadConversations();
       }
 
+      async function encryptWithRSA(data) {
+        if (!publicKeyPem) {
+          throw new Error(
+            'Public key is not generated. Call generateRSAKeys first.'
+          );
+        }
+
+        const publicKey = await importPublicKey(publicKeyPem);
+        const encodedData = new TextEncoder().encode(data);
+
+        const encryptedData = await window.crypto.subtle.encrypt(
+          {
+            name: 'RSA-OAEP',
+          },
+          publicKey,
+          encodedData
+        );
+
+        return arrayBufferToBase64(encryptedData);
+      }
+
+      async function importPublicKey(pem) {
+        const binaryDer = pemToArrayBuffer(pem);
+        return await window.crypto.subtle.importKey(
+          'spki',
+          binaryDer,
+          {
+            name: 'RSA-OAEP',
+            hash: 'SHA-256',
+          },
+          true,
+          ['encrypt']
+        );
+      }
+
+      function pemToArrayBuffer(pem) {
+        const base64 = pem.replace(/-----[^-]+-----/g, '').replace(/\s/g, '');
+        const binary = atob(base64);
+        const buffer = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          buffer[i] = binary.charCodeAt(i);
+        }
+        return buffer.buffer;
+      }
+
+      function arrayBufferToBase64(buffer) {
+        const binary = String.fromCharCode(...new Uint8Array(buffer));
+        return btoa(binary);
+      }
+
       initializeKeysAndLoadConversations();
 
       /*
-          function generateRSAKeys() {
-            const key = new NodeRSA({ b: 2048 });
+              function generateRSAKeys() {
+                const key = new NodeRSA({ b: 2048 });
 
-            return {
-              publicKey: key.exportKey('pkcs8-public-pem'),
-              privateKey: key.exportKey('pkcs8-private-pem'),
-            };
-          }
+                return {
+                  publicKey: key.exportKey('pkcs8-public-pem'),
+                  privateKey: key.exportKey('pkcs8-private-pem'),
+                };
+              }
 
 
-          const { publicKey, privateKey } = generateRSAKeys();
-         */
+              const { publicKey, privateKey } = generateRSAKeys();
+             */
 
       function joinConversation(conversationId) {
         if (!conversationId) {
@@ -577,11 +627,11 @@
         const inputArea = document.createElement('div');
         inputArea.classList.add('input-area');
         inputArea.innerHTML = `
-               <div style="display: flex; align-items: center; width: 100%; gap: 10px">
-                <input type="text" onkeydown="handleEnter(event, '${conversationId}')" id="messageInput" placeholder="Type a message..." />
-                <button onclick="sendMessage('${conversationId}')">Send</button>
-               </div>
-              `;
+                   <div style="display: flex; align-items: center; width: 100%; gap: 10px">
+                    <input type="text" onkeydown="handleEnter(event, '${conversationId}')" id="messageInput" placeholder="Type a message..." />
+                    <button onclick="sendMessage('${conversationId}')">Send</button>
+                   </div>
+                  `;
         if (!convo.querySelector('.input-area')) {
           convo.appendChild(inputArea);
         }
@@ -641,24 +691,26 @@
               publicKeyPem
             );
             userDiv.innerHTML = `
-              <div class="horiFlex">
-                <div class="nameAndImage">
-                  <img class="userImg" src="${
-                    convo.otherUserImage
-                  }" alt="User Image" />
-                  <div class="lastMessageAndName">
-                    <span class="username">@${convo.otherUsername}</span>
-                    <p class="lastMessage">${decryptMessage(
-                      convo.lastMessage,
-                      key
-                    )}</p>
+                  <div class="horiFlex">
+                    <div class="nameAndImage">
+                      <img class="userImg" src="${
+                        convo.otherUserImage
+                      }" alt="User Image" />
+                      <div class="lastMessageAndName">
+                        <span class="username">@${convo.otherUsername}</span>
+                        <p class="lastMessage">${decryptMessage(
+                          convo.lastMessage,
+                          key
+                        )}</p>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-              <div class="ago">
-                <span class="time">${formatTime(convo.lastMessageTime)}</span>
-              </div>
-            `;
+                  <div class="ago">
+                    <span class="time">${formatTime(
+                      convo.lastMessageTime
+                    )}</span>
+                  </div>
+                `;
 
             // Handle active user click
             userDiv.addEventListener('click', () => {
@@ -669,12 +721,12 @@
                 userDiv.classList.add('active');
 
                 document.querySelector('.chat-header').innerHTML = `
-              <img  src="${convo.otherUserImage}" alt="User Image" />
-              <span class="username">@${convo.otherUsername}</span>
+                  <img  src="${convo.otherUserImage}" alt="User Image" />
+                  <span class="username">@${convo.otherUsername}</span>
 
 
 
-            `;
+                `;
                 const conversationId = convo.conversationId;
                 globalConversationId = conversationId;
 
@@ -713,8 +765,192 @@
           loadConversations();
         }
       });
-
       let globalDecryptedKey;
+      let globalMyId;
+
+      function createActionButtons(msg, key) {
+        const actionsDiv = document.createElement('div');
+        actionsDiv.classList.add('message-actions');
+
+        const replyBtn = document.createElement('div');
+        replyBtn.classList.add('action-btn');
+        replyBtn.textContent = '↩';
+
+        replyBtn.addEventListener('click', () => {
+          const messageInput = document.getElementById('messageInput');
+          const inputArea = document.querySelector('.input-area');
+          const existingPreview = document.querySelector('.reply-preview');
+
+          if (existingPreview && existingPreview.dataset.id === msg._id) return;
+          if (existingPreview) existingPreview.remove();
+
+          const replyPreview = document.createElement('div');
+          replyPreview.classList.add('reply-preview');
+          replyPreview.dataset.id = msg._id;
+          replyPreview.innerHTML = `
+        <div class="replyFlex">
+          <span class="username">@${msg.sender.username}</span>
+          <span class="close-reply">❌</span>
+        </div>
+        <p>${decryptMessage(msg.text, key)}</p>
+      `;
+
+          replyPreview
+            .querySelector('.close-reply')
+            .addEventListener('click', () => {
+              replyPreview.remove();
+            });
+
+          inputArea.prepend(replyPreview);
+          messageInput.focus();
+        });
+
+        const reactBtn = document.createElement('div');
+        reactBtn.classList.add('action-btn');
+        reactBtn.textContent = '🗑';
+
+        actionsDiv.appendChild(replyBtn);
+        actionsDiv.appendChild(reactBtn);
+
+        return actionsDiv;
+      }
+
+      function addMessageToUI(msg, myId, key, fetching = true, rece = false) {
+        if (!messagesContainer) {
+          console.error('messagesContainer not found!');
+          return;
+        }
+
+        const messageDiv = document.createElement('div');
+        const messageContent = document.createElement('p');
+        const actionsDiv = createActionButtons(msg, key);
+
+        messageDiv.classList.add(
+          'message',
+          msg.sender?._id === myId ? 'sent' : 'received'
+        );
+        messageDiv.dataset.id = msg._id;
+
+        messageContent.textContent =
+          fetching || rece ? decryptMessage(msg.text, key) : msg.text;
+
+        const actionAndMessage = document.createElement('div');
+        actionAndMessage.classList.add('actionAndMessage');
+
+        if (msg.replyingTo) {
+          const replyPreviewDiv = document.createElement('div');
+          replyPreviewDiv.classList.add('reply-preview-box');
+          replyPreviewDiv.innerHTML = msg.replyingTo
+            ? `<div class="reply-preview-content">
+          <strong>${
+            msg.replyingTo.sender?._id === myId
+              ? 'You'
+              : msg.replyingTo.sender?.username || 'Unknown'
+          }</strong> 
+          ${decryptMessage(msg.replyingTo.text, key)}
+        </div>`
+            : `<div class="reply-preview-content"><strong>Replying to</strong>: [Message not found]</div>`;
+
+          messageDiv.prepend(replyPreviewDiv);
+        }
+
+        if (messageDiv.classList.contains('sent')) {
+          actionAndMessage.appendChild(actionsDiv);
+          actionAndMessage.appendChild(messageContent);
+        } else {
+          actionAndMessage.appendChild(messageContent);
+          actionAndMessage.appendChild(actionsDiv);
+        }
+
+        messageDiv.appendChild(actionAndMessage);
+
+        if (rece) {
+          messagesContainer.appendChild(messageDiv); // Append new messages
+        } else {
+          fetching
+            ? messagesContainer.prepend(messageDiv) // Prepend fetched messages
+            : messagesContainer.appendChild(messageDiv);
+        }
+      }
+
+      async function fetchMessages(conversationId) {
+        if (!hasMoreMessages || isLoading) return;
+
+        isLoading = true;
+
+        try {
+          const key = await fetchConversationKey(conversationId, publicKeyPem);
+          globalDecryptedKey = key;
+
+          const res = await fetch(
+            `/api/users/conversations/${conversationId}?page=${messagesPage}&limit=${limit}`
+          );
+
+          if (!res.ok)
+            throw new Error(`Failed to fetch messages: ${res.statusText}`);
+
+          const data = await res.json();
+          const { conversation, myId, hasMoreMessages: more } = data;
+          hasMoreMessages = more;
+          globalMyId = myId;
+
+          conversation.messages.forEach((msg) =>
+            addMessageToUI(msg, myId, key)
+          );
+
+          messagesContainer.scrollTop =
+            messagesPage === 1
+              ? messagesContainer.scrollHeight
+              : messagesContainer.scrollTop;
+          messagesPage++;
+        } catch (error) {
+          console.error('Error fetching messages:', error);
+        } finally {
+          isLoading = false;
+        }
+      }
+
+      async function sendMessage(conversationId) {
+        const messageInput = document.getElementById('messageInput');
+        const rawMessage = messageInput.value.trim();
+
+        if (!messageInput || !rawMessage) {
+          alert('Message cannot be empty!');
+          return;
+        }
+
+        try {
+          const encryptedMessage = encryptMessage(
+            rawMessage,
+            globalDecryptedKey
+          );
+          const replyingTo = document.querySelector('.reply-preview');
+          const messageId = replyingTo?.dataset.id;
+
+          socket.emit('sendMessage', {
+            conversationId,
+            message: encryptedMessage,
+            replyingTo: messageId || undefined,
+          });
+
+          messageInput.value = '';
+          if (replyingTo) replyingTo.remove();
+        } catch (error) {
+          console.error('Error sending message:', error);
+          alert('Failed to send message. Please try again.');
+        }
+      }
+
+      socket.on('messageSent', ({ newMessage }) => {
+        addMessageToUI(newMessage, globalMyId, globalDecryptedKey, false, true);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      });
+
+      socket.on('receiveMessage', ({ newMessage }) => {
+        addMessageToUI(newMessage, globalMyId, globalDecryptedKey, false, true);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      });
+
       function switchConversation(conversationId) {
         messagesContainer.innerHTML = '';
         messagesPage = 1;
@@ -749,150 +985,6 @@
         }
       }
 
-      async function fetchMessages(conversationId) {
-        if (!hasMoreMessages || isLoading) return;
-
-        const key = await fetchConversationKey(conversationId, publicKeyPem);
-
-        isLoading = true;
-
-        try {
-          const res = await fetch(
-            `/api/users/conversations/${conversationId}?page=${messagesPage}&limit=${limit}`
-          );
-
-          if (!res.ok)
-            throw new Error(`Failed to fetch messages: ${res.statusText}`);
-
-          const data = await res.json();
-          const { conversation, myId, hasMoreMessages: more } = data;
-
-          hasMoreMessages = more;
-
-          if (conversation.messages.length > 0) {
-            conversation.messages.forEach((msg) => {
-              const messageDiv = document.createElement('div');
-              const messageContent = document.createElement('p');
-              const actionsDiv = document.createElement('div');
-              actionsDiv.classList.add('message-actions');
-
-              // Handle reply preview
-              if (msg.replyingTo) {
-                const replyPreviewDiv = document.createElement('div');
-                replyPreviewDiv.classList.add('reply-preview-box');
-
-                // Find the original replied message
-                const repliedMessage = conversation.messages.find(
-                  (m) => m._id === msg.replyingTo
-                );
-
-                if (repliedMessage) {
-                  replyPreviewDiv.innerHTML = `
-              <div class="reply-preview-content">
-                <strong>@${repliedMessage.sender.username}</strong>: 
-                ${decryptMessage(repliedMessage.text, key)}
-              </div>
-            `;
-                } else {
-                  replyPreviewDiv.innerHTML = `<div class="reply-preview-content"><strong>Replying to</strong>: [Message not found]</div>`;
-                }
-
-                messageDiv.appendChild(replyPreviewDiv);
-              }
-
-              const replyBtn = document.createElement('div');
-              replyBtn.classList.add('action-btn');
-              replyBtn.textContent = '↩'; // Reply icon
-
-              replyBtn.addEventListener('click', () => {
-                const messageInput = document.getElementById('messageInput');
-                const inputArea = document.querySelector('.input-area');
-                const existingPreview =
-                  document.querySelector('.reply-preview');
-
-                if (existingPreview && existingPreview.dataset.id === msg._id) {
-                  return;
-                }
-
-                if (existingPreview) {
-                  existingPreview.remove();
-                }
-
-                const replyPreview = document.createElement('div');
-                replyPreview.classList.add('reply-preview');
-                replyPreview.dataset.id = msg._id;
-                replyPreview.innerHTML = `
-            <div class="replyFlex">
-              <span class="username">@${msg.sender.username}</span>
-              <span class="close-reply">❌</span>
-            </div>
-            <p>${decryptMessage(msg.text, key)}</p>
-          `;
-
-                replyPreview
-                  .querySelector('.close-reply')
-                  .addEventListener('click', () => {
-                    replyPreview.remove();
-                  });
-
-                inputArea.prepend(replyPreview);
-                messageInput.focus();
-              });
-
-              const deleteBtn = document.createElement('div');
-              deleteBtn.classList.add('action-btn');
-              deleteBtn.textContent = '🗑'; // Delete icon
-              messageDiv.classList.add(
-                'message',
-                msg.sender?._id === myId ? 'sent' : 'received'
-              );
-              messageDiv.dataset.id = msg._id;
-              messageContent.innerHTML = `${decryptMessage(msg.text, key)}`;
-              actionsDiv.appendChild(replyBtn);
-              actionsDiv.appendChild(deleteBtn);
-              const actionAndMessage = document.createElement('div');
-              actionAndMessage.classList.add('actionAndMessage');
-
-              messageDiv.classList.contains('sent')
-                ? (actionAndMessage.appendChild(actionsDiv),
-                  actionAndMessage.appendChild(messageContent))
-                : (actionAndMessage.appendChild(messageContent),
-                  actionAndMessage.appendChild(actionsDiv));
-
-              messageDiv.appendChild(actionAndMessage);
-              messagesContainer.prepend(messageDiv);
-            });
-
-            // Scroll to bottom of messages container
-            if (messagesPage === 1) {
-              messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            } else {
-              const previousScrollHeight = messagesContainer.scrollHeight;
-
-              setTimeout(() => {
-                const newScrollHeight = messagesContainer.scrollHeight;
-                messagesContainer.scrollTop +=
-                  newScrollHeight - previousScrollHeight;
-              }, 0);
-            }
-
-            messagesPage++;
-          } else {
-            hasMoreMessages = false;
-            if (!messagesContainer.querySelector('.noMoreMessages')) {
-              const noMoreMessages = document.createElement('div');
-              noMoreMessages.classList.add('noMoreMessages');
-              noMoreMessages.textContent = 'No more messages';
-              messagesContainer.prepend(noMoreMessages);
-            }
-          }
-        } catch (error) {
-          console.error('Error fetching messages:', error);
-        } finally {
-          isLoading = false;
-        }
-      }
-      // Infinite scroll for messages
       messagesContainer.addEventListener('scroll', () => {
         if (
           messagesContainer.scrollTop === 0 &&
@@ -911,226 +1003,37 @@
       messagesContainer.addEventListener('scroll', () => {
         if (messagesContainer.scrollTop === 0) {
           const conversationId = getActiveConversationId();
-          fetchMessages(conversationId);
+
+          // Save the current scroll position and height
+          const oldScrollTop = messagesContainer.scrollTop;
+          const oldHeight = messagesContainer.scrollHeight;
+
+          // Disable scrolling
+
+          fetchMessages(conversationId).then(() => {
+            // Use setTimeout to wait for the rendering to finish
+            setTimeout(() => {
+              const newHeight = messagesContainer.scrollHeight;
+
+              // Restore scroll position without any flicker
+              messagesContainer.scrollTop = newHeight - oldHeight;
+
+              // Re-enable scrolling
+              messagesContainer.style.overflow = '';
+            }, 0);
+          });
         }
       });
 
-      async function sendMessage(conversationId) {
-        const messageInput = document.getElementById('messageInput');
-        if (!messageInput) {
-          console.error('Message input field not found!');
-          return;
-        }
-
-        const rawMessage = messageInput.value.trim();
-        if (!rawMessage) {
-          alert('Message cannot be empty!');
-          return;
-        }
-
-        try {
-          const encryptedMessage = encryptMessage(
-            rawMessage,
-            globalDecryptedKey
-          );
-          console.log('Sending encrypted message:', encryptedMessage);
-
-          const replyingTo = document.querySelector('.reply-preview');
-          const messageId = replyingTo?.dataset.id;
-
-          // Send message via WebSocket
-          socket.emit('sendMessage', {
-            conversationId,
-            message: encryptedMessage,
-            replyingTo: messageId || undefined,
-          });
-
-          // Display the message immediately in the UI
-          const messagesContainer = document.querySelector('.messages');
-          if (!messagesContainer) {
-            console.error('Messages container not found!');
-            return;
-          }
-
-          const messageDiv = document.createElement('div');
-          messageDiv.classList.add('message', 'sent');
-
-          // Show reply preview above the message
-          if (replyingTo && messageId) {
-            const replyPreviewDiv = document.createElement('div');
-            replyPreviewDiv.classList.add('reply-preview-box');
-
-            const username =
-              replyingTo.querySelector('.username')?.textContent ||
-              'Unknown user';
-            const messageText =
-              replyingTo.querySelector('p')?.textContent || 'Replied message';
-
-            replyPreviewDiv.innerHTML = `<strong>${username}</strong>: ${messageText}`;
-            messageDiv.appendChild(replyPreviewDiv);
-          }
-
-          // Add the sent message
-          const messageContent = document.createElement('p');
-          messageContent.textContent = rawMessage;
-
-          // Add action buttons next to the message
-          const actionContainer = document.createElement('div');
-          actionContainer.classList.add('message-actions');
-
-          const deleteBtn = document.createElement('div');
-          deleteBtn.classList.add('action-btn');
-          deleteBtn.textContent = '🗑';
-          deleteBtn.addEventListener('click', () => {
-            messageDiv.remove();
-          });
-
-          const replyBtn = document.createElement('div');
-          replyBtn.classList.add('action-btn');
-          replyBtn.textContent = '↩';
-          replyBtn.addEventListener('click', () => {
-            messageInput.value = rawMessage;
-            messageInput.focus();
-          });
-
-          actionContainer.appendChild(deleteBtn);
-          actionContainer.appendChild(replyBtn);
-
-          // Create wrapper for message and
-          const actionAndMessage = document.createElement('div');
-          actionAndMessage.classList.add('actionAndMessage');
-
-          // Append elements based on message type
-
-          messageDiv.classList.contains('sent')
-            ? (actionAndMessage.appendChild(actionContainer),
-              actionAndMessage.appendChild(messageContent))
-            : (actionAndMessage.appendChild(messageContent),
-              actionAndMessage.appendChild(actionContainer));
-
-          messageDiv.appendChild(actionAndMessage);
-          messagesContainer.appendChild(messageDiv);
-
-          // Scroll to the bottom
-          messagesContainer.scrollTop = messagesContainer.scrollHeight;
-
-          // Handle the server response to attach message ID
-          socket.once('messageSent', ({ messageId }) => {
-            messageDiv.dataset.id = messageId;
-          });
-
-          // Handle new incoming messages
-
-          // Clear input and hide reply preview
-          messageInput.value = '';
-          if (replyingTo) {
-            replyingTo.remove();
-          }
-        } catch (error) {
-          console.error('Error sending message:', error);
-          alert('Failed to send message. Please try again.');
-        }
-      }
-
-      socket.on(
-        'receiveMessage',
-        ({ sender, message, messageId, replyingTo, username }) => {
-          // Avoid rendering duplicate messages
-          if (document.querySelector(`[data-id="${messageId}"]`)) return;
-          displayMessage(sender, message, replyingTo, messageId, username);
-        }
-      );
-
-      async function displayMessage(
-        sender,
-        message,
-        replyingTo,
-        messageId,
-        username
-      ) {
-        const messagesContainer = document.querySelector('.messages');
-        if (!messagesContainer) {
-          console.error('Messages container not found!');
-          return;
-        }
-
-        const messageDiv = document.createElement('div');
-        messageDiv.classList.add(
-          'message',
-          sender === socket.id ? 'sent' : 'received'
+      function updateConversationLastMessage(conversationId, message) {
+        const userDiv = document.querySelector(
+          `.user[data-id="${conversationId}"]`
         );
-        messageDiv.dataset.id = messageId;
-
-        // Show reply preview
-        if (replyingTo) {
-          const replyPreviewDiv = document.createElement('div');
-          replyPreviewDiv.classList.add('reply-preview-box');
-
-          const repliedMessage = document.querySelector(
-            `[data-id="${replyingTo}"]`
-          );
-          if (repliedMessage) {
-            const repliedUsername = username || 'Unknown user';
-            const repliedText =
-              repliedMessage.querySelector('p')?.textContent ||
-              'Replied message';
-
-            replyPreviewDiv.innerHTML = `<strong>${repliedUsername}</strong>: ${repliedText}`;
-          } else {
-            replyPreviewDiv.innerHTML = `<strong>Replying to</strong>: [Message not found]`;
-          }
-
-          messageDiv.appendChild(replyPreviewDiv);
+        if (userDiv) {
+          userDiv.querySelector('.lastMessage').textContent = message;
         }
-
-        // Decrypt and display the message content
-        message = decryptMessage(message, globalDecryptedKey);
-        const messageContent = document.createElement('p');
-        messageContent.textContent = message;
-
-        // Add action buttons (delete and reply)
-        const actionContainer = document.createElement('div');
-        actionContainer.classList.add('message-actions');
-
-        const deleteBtn = document.createElement('div');
-        deleteBtn.classList.add('action-btn');
-        deleteBtn.textContent = '🗑';
-        deleteBtn.addEventListener('click', () => {
-          messageDiv.remove();
-        });
-
-        const replyBtn = document.createElement('div');
-        replyBtn.classList.add('action-btn');
-        replyBtn.textContent = '↩';
-        replyBtn.addEventListener('click', () => {
-          const messageInput = document.getElementById('messageInput');
-          if (messageInput) {
-            messageInput.value = message;
-            messageInput.focus();
-          }
-        });
-
-        actionContainer.appendChild(deleteBtn);
-        actionContainer.appendChild(replyBtn);
-
-        // Create wrapper for message and actions
-        const actionAndMessage = document.createElement('div');
-        actionAndMessage.classList.add('actionAndMessage');
-
-        messageDiv.classList.contains('sent')
-          ? (actionAndMessage.appendChild(actionContainer),
-            actionAndMessage.appendChild(messageContent))
-          : (actionAndMessage.appendChild(messageContent),
-            actionAndMessage.appendChild(actionContainer));
-
-        messageDiv.appendChild(actionAndMessage);
-        messagesContainer.appendChild(messageDiv);
-
-        // Scroll to the bottom
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
       }
 
-      // This makes incoming and sent messages look the same, with consistent UI elements and interactions. Let me know if you’d like any tweaks! 🚀
       newChatButton.addEventListener('click', () => {
         chatSearch.style.display =
           chatSearch.style.display === 'none' ? 'block' : 'none';
@@ -1162,11 +1065,11 @@
           searchResults.innerHTML = users
             .map(
               (user) => `
-            <div data-id="${user.id}">
-              ${user.username}
-              <img src="${user.image}" alt="User Image" />
-            </div>
-          `
+                <div data-id="${user.id}">
+                  ${user.username}
+                  <img src="${user.image}" alt="User Image" />
+                </div>
+              `
             )
             .join('');
         } catch (error) {

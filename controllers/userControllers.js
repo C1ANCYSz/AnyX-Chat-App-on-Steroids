@@ -134,11 +134,18 @@ exports.getConversation = async (req, res, next) => {
     // Paginated message fetch
     const messages = await Message.find({ conversation: id })
       .populate('sender', 'username profileImage')
+      .populate({
+        path: 'replyingTo',
+        select: 'text sender',
+        populate: {
+          path: 'sender',
+          select: 'username profileImage',
+        },
+      })
       .sort({ timestamp: -1 })
       .skip((pageNum - 1) * limitNum)
       .limit(limitNum)
-      .lean();
-
+      .lean({ virtuals: true });
     conversation.messages = messages;
 
     // Check for more messages
