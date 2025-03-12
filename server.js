@@ -109,6 +109,33 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('offer', ({ offer, targetUserId }) => {
+    const receiverSocketId = users.get(targetUserId);
+
+    console.log(`Offer from ${socket.id} to ${targetUserId}`);
+
+    if (receiverSocketId) {
+      // Notify target user of the incoming call
+      io.to(receiverSocketId).emit('incomingCall', {
+        offer,
+        senderId: socket.id,
+      });
+
+      console.log(`Incoming call from ${socket.id} to ${targetUserId}`);
+    } else {
+      socket.emit('error', { message: 'User is offline or not found' });
+    }
+  });
+
+  // Handle answer
+  socket.on('answer', ({ answer, targetUserId }) => {
+    io.to(targetUserId).emit('answer', answer);
+  });
+
+  // Handle ICE candidates
+  socket.on('candidate', ({ candidate, targetUserId }) => {
+    io.to(targetUserId).emit('candidate', candidate);
+  });
   socket.on('disconnect', () => {
     console.log('User disconnected');
     users.forEach((socketId, userId) => {

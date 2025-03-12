@@ -85,6 +85,7 @@
         display: flex;
         flex-direction: row;
         align-items: center;
+        justify-content: space-between;
         gap: 10px;
       }
       .chat-header img {
@@ -500,6 +501,109 @@
           transform: translateY(0);
         }
       }
+
+      .message {
+        position: relative;
+      }
+
+      .action-btn {
+        cursor: pointer;
+        padding: 8px 12px;
+        border-radius: 8px;
+
+        color: #fff;
+        font-size: 14px;
+      }
+
+      .reactions-container {
+        display: none; /* Initially hidden */
+        position: absolute;
+        top: 100%; /* Appear right below the button */
+        left: 0;
+        border: 1px solid #ccc;
+
+        background: #222;
+        border-radius: 10px;
+        z-index: 1000;
+        gap: 10px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        white-space: nowrap; /* Keep reactions in a single row */
+        margin-top: 4px;
+      }
+
+      .reaction-btn {
+        cursor: pointer;
+        padding: 8px;
+        border-radius: 50%;
+        font-size: 20px;
+        transition: background 0.2s;
+      }
+
+      .reaction-btn:hover {
+        background: #444;
+      }
+
+      .call {
+        cursor: pointer;
+      }
+      /* Style for the incoming call notification */
+      .incoming-call {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 20px;
+        background: #ffffff;
+        border: 2px solid #007bff;
+        border-radius: 10px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        z-index: 9999;
+        max-width: 300px;
+        text-align: center;
+        animation: slideIn 0.3s ease-in-out;
+      }
+
+      .incoming-call p {
+        margin: 0 0 15px;
+        font-size: 1.2em;
+        color: #333;
+      }
+
+      .incoming-call button {
+        padding: 10px 20px;
+        font-size: 1em;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        margin: 0 10px;
+      }
+
+      #acceptCall {
+        background-color: #28a745;
+        color: #fff;
+      }
+
+      #acceptCall:hover {
+        background-color: #218838;
+      }
+
+      #rejectCall {
+        background-color: #dc3545;
+        color: #fff;
+      }
+
+      #rejectCall:hover {
+        background-color: #c82333;
+      }
+
+      /* Slide-in animation */
+      @keyframes slideIn {
+        from {
+          transform: translateX(100%);
+        }
+        to {
+          transform: translateX(0);
+        }
+      }
     </style>
   </head>
   <body>
@@ -534,10 +638,11 @@
         </div>
       </div>
       <div class="pushNotifications"></div>
+      <audio style="display: none" id="remoteAudio" autoplay></audio>
     </div>
 
     <script src="/js/node-rsa-browser.js"></script>
-    <script src="/js/dashboard.js"></script>
+
     <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.js"></script>
     <script src="/socket.io/socket.io.js"></script>
 
@@ -587,6 +692,9 @@
           await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey),
           'PRIVATE KEY'
         );
+      }
+      if (!window.crypto || !window.crypto.subtle) {
+        alert('Web Crypto API not supported');
       }
 
       function arrayBufferToPem(buffer, label) {
@@ -657,18 +765,18 @@
       initializeKeysAndLoadConversations();
 
       /*
-                    function generateRSAKeys() {
-                      const key = new NodeRSA({ b: 2048 });
+                      function generateRSAKeys() {
+                        const key = new NodeRSA({ b: 2048 });
 
-                      return {
-                        publicKey: key.exportKey('pkcs8-public-pem'),
-                        privateKey: key.exportKey('pkcs8-private-pem'),
-                      };
-                    }
+                        return {
+                          publicKey: key.exportKey('pkcs8-public-pem'),
+                          privateKey: key.exportKey('pkcs8-private-pem'),
+                        };
+                      }
 
 
-                    const { publicKey, privateKey } = generateRSAKeys();
-                   */
+                      const { publicKey, privateKey } = generateRSAKeys();
+                     */
 
       function joinConversation() {
         const conversationId = globalConversationId;
@@ -733,11 +841,11 @@
         const inputArea = document.createElement('div');
         inputArea.classList.add('input-area');
         inputArea.innerHTML = `
-                         <div style="display: flex; align-items: center; width: 100%; gap: 10px">
-                          <input type="text" onkeydown="handleEnter(event)" id="messageInput" placeholder="Type a message..." />
-                          <button onclick="sendMessage()">Send</button>
-                         </div>
-                        `;
+                           <div style="display: flex; align-items: center; width: 100%; gap: 10px">
+                            <input type="text" onkeydown="handleEnter(event)" id="messageInput" placeholder="Type a message..." />
+                            <button onclick="sendMessage()">Send</button>
+                           </div>
+                          `;
         if (!convo.querySelector('.input-area')) {
           convo.appendChild(inputArea);
         }
@@ -808,24 +916,24 @@
 
         fetchConversationKey(convo.conversationId, publicKeyPem).then((key) => {
           userDiv.innerHTML = `
-            <div class="horiFlex">
-              <div class="nameAndImage">
-                <img class="userImg" src="${
-                  convo.otherUserImage
-                }" alt="User Image" />
-                <div class="lastMessageAndName">
-                  <span class="username">@${convo.otherUsername}</span>
-                  <p class="lastMessage">${decryptMessage(
-                    convo.lastMessage,
-                    key
-                  )}</p>
+              <div class="horiFlex">
+                <div class="nameAndImage">
+                  <img class="userImg" src="${
+                    convo.otherUserImage
+                  }" alt="User Image" />
+                  <div class="lastMessageAndName">
+                    <span class="username">@${convo.otherUsername}</span>
+                    <p class="lastMessage">${decryptMessage(
+                      convo.lastMessage,
+                      key
+                    )}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div class="ago">
-              <span class="time">${formatTime(convo.lastMessageTime)}</span>
-            </div>
-          `;
+              <div class="ago">
+                <span class="time">${formatTime(convo.lastMessageTime)}</span>
+              </div>
+            `;
 
           userDiv.addEventListener('click', () =>
             handleUserClick(userDiv, convo)
@@ -848,9 +956,10 @@
         userDiv.classList.add('active');
 
         document.querySelector('.chat-header').innerHTML = `
-          <img src="${convo.otherUserImage}" alt="User Image" />
-          <span class="username">@${convo.otherUsername}</span>
-        `;
+          <div style="display:flex; align-items:center; gap:10px" >  <img src="${convo.otherUserImage}" alt="User Image" />
+            <span class="username">@${convo.otherUsername}</span></div>
+            <p class="call" onClick="callUser('${convo.otherUserId}') ">📞</p>
+          `;
 
         globalConversationId = convo.conversationId;
         console.log('Switching to conversation:', globalConversationId);
@@ -858,7 +967,7 @@
         switchConversation(globalConversationId);
         joinConversation();
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
-
+        console.log(convo.otherUserId);
         appendTextarea(convo.conversationId);
       }
 
@@ -877,10 +986,20 @@
         }
       });
 
+      const reactions = {
+        like: '👍',
+        love: '❤️',
+        haha: '😂',
+        wow: '😮',
+        sad: '😢',
+        angry: '😠',
+      };
+
       function createActionButtons(msg, key) {
         const actionsDiv = document.createElement('div');
         actionsDiv.classList.add('message-actions');
 
+        // Reply Button
         const replyBtn = document.createElement('div');
         replyBtn.classList.add('action-btn');
         replyBtn.textContent = '↩';
@@ -897,12 +1016,12 @@
           replyPreview.classList.add('reply-preview');
           replyPreview.dataset.id = msg._id;
           replyPreview.innerHTML = `
-              <div class="replyFlex">
-                <span class="username">@${msg.sender.username}</span>
-                <span class="close-reply">❌</span>
-              </div>
-              <p>${decryptMessage(msg.text, key)}</p>
-            `;
+        <div class="replyFlex">
+          <span class="username">@${msg.sender.username}</span>
+          <span class="close-reply">❌</span>
+        </div>
+        <p>${decryptMessage(msg.text, key)}</p>
+      `;
 
           replyPreview
             .querySelector('.close-reply')
@@ -914,12 +1033,60 @@
           messageInput.focus();
         });
 
+        // Reaction Button
         const reactBtn = document.createElement('div');
         reactBtn.classList.add('action-btn');
-        reactBtn.textContent = '🗑';
+        reactBtn.textContent = '☺';
 
+        const reactionsContainer = document.createElement('div');
+        reactionsContainer.classList.add('reactions-container');
+
+        // Example reactions
+
+        // Create reaction buttons
+        for (const reaction in reactions) {
+          const reactionBtn = document.createElement('div');
+          reactionBtn.classList.add('reaction-btn');
+          reactionBtn.textContent = reactions[reaction];
+
+          // Handle reaction click
+          // Handle reaction click
+          reactionBtn.addEventListener('click', () => {
+            reactBtn.textContent = reactions[reaction]; // Show emoji on button
+            reactionsContainer.style.display = 'none'; // Hide container
+
+            // Emit reaction name
+            console.log('Selected reaction:', reaction); // Emit the reaction name
+            console.log('Message ID:', msg._id);
+
+            // Example: Emit through WebSocket or API
+            socket.emit('reaction', { messageId: msg._id, reaction: reaction });
+          });
+
+          reactionsContainer.appendChild(reactionBtn);
+        }
+
+        // Toggle reactions visibility on click
+        reactBtn.addEventListener('click', (event) => {
+          event.stopPropagation(); // Prevent click from bubbling
+          reactionsContainer.style.display =
+            reactionsContainer.style.display === 'flex' ? 'none' : 'flex';
+        });
+
+        // Hide reactions container when clicking outside
+        document.addEventListener('click', (event) => {
+          if (
+            !reactBtn.contains(event.target) &&
+            !reactionsContainer.contains(event.target)
+          ) {
+            reactionsContainer.style.display = 'none';
+          }
+        });
+
+        // Append elements
         actionsDiv.appendChild(replyBtn);
         actionsDiv.appendChild(reactBtn);
+        actionsDiv.appendChild(reactionsContainer);
 
         return actionsDiv;
       }
@@ -951,13 +1118,13 @@
           replyPreviewDiv.classList.add('reply-preview-box');
           replyPreviewDiv.innerHTML = msg.replyingTo
             ? `<div class="reply-preview-content">
-                <strong>${
-                  msg.replyingTo.sender?._id === myId
-                    ? 'You'
-                    : msg.replyingTo.sender?.username || 'Unknown'
-                }</strong>
-                ${decryptMessage(msg.replyingTo.text, key)}
-              </div>`
+                  <strong>${
+                    msg.replyingTo.sender?._id === myId
+                      ? 'You'
+                      : msg.replyingTo.sender?.username || 'Unknown'
+                  }</strong>
+                  ${decryptMessage(msg.replyingTo.text, key)}
+                </div>`
             : `<div class="reply-preview-content"><strong>Replying to</strong>: [Message not found]</div>`;
 
           messageDiv.prepend(replyPreviewDiv);
@@ -1038,17 +1205,17 @@
         const notification = document.createElement('div');
         notification.className = 'notification';
         notification.innerHTML = `
-          <div class="notification-content">
-              <div class="notification-icon">
-                  <i class="fas fa-bell"></i>
-              </div>
-              <div class="notification-sender">${sender}</div>
-              <div class="notification-text">
-                  <span class="notification-title">New Message</span>
-                  <span class="notification-message">${message}</span>
-              </div>
-          </div>
-      `;
+            <div class="notification-content">
+                <div class="notification-icon">
+                    <i class="fas fa-bell"></i>
+                </div>
+                <div class="notification-sender">${sender}</div>
+                <div class="notification-text">
+                    <span class="notification-title">New Message</span>
+                    <span class="notification-message">${message}</span>
+                </div>
+            </div>
+        `;
 
         // Show the notification
         notificationContainer.appendChild(notification);
@@ -1239,11 +1406,11 @@
           searchResults.innerHTML = users
             .map(
               (user) => `
-                      <div data-id="${user.id}">
-                        ${user.username}
-                        <img src="${user.image}" alt="User Image" />
-                      </div>
-                    `
+                        <div data-id="${user.id}">
+                          ${user.username}
+                          <img src="${user.image}" alt="User Image" />
+                        </div>
+                      `
             )
             .join('');
         } catch (error) {
@@ -1264,5 +1431,6 @@
         }
       });
     </script>
+    <script src="/js/dashboard.js"></script>
   </body>
 </html>

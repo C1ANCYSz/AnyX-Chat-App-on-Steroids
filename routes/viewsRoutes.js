@@ -21,7 +21,7 @@ const createDummyConversation = async (req, res) => {
 
 router.get('/', async (req, res) => {
   if (req.cookies.jwt) {
-    await createDummyConversation(req, res);
+    // await createDummyConversation(req, res);
     return res.redirect('/dashboard');
   }
 
@@ -74,6 +74,7 @@ router.get('/convos', isVerified, async (req, res) => {
         otherUserImage: otherUser?.image || '/default-avatar.png',
         lastMessage: convo.lastMessage?.text || 'No messages yet',
         lastMessageTime: convo.lastMessage?.timestamp,
+        otherUserId: otherUser?._id,
       };
     });
 
