@@ -341,16 +341,37 @@
       .explore {
         flex: 1;
       }
+      .sidebar-toggle {
+        display: block;
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        background-color: #007bff;
+        color: #fff;
+        border: none;
+        padding: 10px;
+        cursor: pointer;
+        z-index: 1100;
+      }
 
       @media screen and (max-width: 768px) {
         .sidebar {
-          max-width: fit-content;
+          display: none; /* Show sidebar on larger screens */
+        }
+        .sidebar-toggle {
+          display: block; /* Hide toggle button on larger screens */
+        }
+        .user {
+          display: flex;
+          flex-direction: column;
         }
         .convo {
           flex: 3;
         }
-        .user {
-          overflow: hidden;
+        .nameAndImage {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
         }
         .lastMessage {
           display: none;
@@ -418,6 +439,67 @@
         justify-content: space-between;
         align-items: center;
       }
+      .pushNotifications {
+        position: fixed;
+        bottom: 10px;
+        right: 10px;
+        max-width: 300px;
+        z-index: 1000;
+        display: none;
+      }
+
+      .notification {
+        background-color: #007bff;
+        color: #fff;
+        padding: 10px;
+        border-radius: 5px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        margin-bottom: 10px;
+        cursor: pointer;
+        animation: fadeIn 0.3s ease;
+      }
+
+      .notification-content {
+        display: flex;
+        align-items: center;
+      }
+
+      .notification-icon {
+        margin-right: 10px;
+      }
+
+      .notification-icon i {
+        font-size: 20px;
+      }
+
+      .notification-sender {
+        font-weight: bold;
+        margin-right: 10px;
+      }
+
+      .notification-text {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .notification-title {
+        font-weight: bold;
+      }
+
+      .notification-message {
+        font-size: 14px;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
     </style>
   </head>
   <body>
@@ -429,6 +511,8 @@
       <div class="searchResults"></div>
     </div>
     <div class="container">
+      <button class="sidebar-toggle" onclick="toggleSidebar()">☰ Menu</button>
+
       <div class="sidebar">
         <input type="text" class="search-bar" placeholder="Search users..." />
         <div class="user-list"></div>
@@ -449,6 +533,7 @@
           </div>
         </div>
       </div>
+      <div class="pushNotifications"></div>
     </div>
 
     <script src="/js/node-rsa-browser.js"></script>
@@ -457,10 +542,26 @@
     <script src="/socket.io/socket.io.js"></script>
 
     <script>
+      const notificationContainer =
+        document.querySelector('.pushNotifications');
+      notificationContainer.style.display = 'block';
+
+      function toggleSidebar() {
+        const convo = document.querySelector('.convo');
+
+        const sidebar = document.querySelector('.sidebar');
+        sidebar.style.display =
+          sidebar.style.display === 'block' ? 'none' : 'block';
+      }
+
       const socket = io();
 
       socket.on('connect', () => {
-        console.log('Connected to server');
+        console.log('Connected to the server');
+      });
+
+      socket.emit('register', () => {
+        console.log('Registered with the server');
       });
 
       let publicKeyPem;
@@ -556,18 +657,18 @@
       initializeKeysAndLoadConversations();
 
       /*
-              function generateRSAKeys() {
-                const key = new NodeRSA({ b: 2048 });
+                    function generateRSAKeys() {
+                      const key = new NodeRSA({ b: 2048 });
 
-                return {
-                  publicKey: key.exportKey('pkcs8-public-pem'),
-                  privateKey: key.exportKey('pkcs8-private-pem'),
-                };
-              }
+                      return {
+                        publicKey: key.exportKey('pkcs8-public-pem'),
+                        privateKey: key.exportKey('pkcs8-private-pem'),
+                      };
+                    }
 
 
-              const { publicKey, privateKey } = generateRSAKeys();
-             */
+                    const { publicKey, privateKey } = generateRSAKeys();
+                   */
 
       function joinConversation() {
         const conversationId = globalConversationId;
@@ -632,11 +733,11 @@
         const inputArea = document.createElement('div');
         inputArea.classList.add('input-area');
         inputArea.innerHTML = `
-                   <div style="display: flex; align-items: center; width: 100%; gap: 10px">
-                    <input type="text" onkeydown="handleEnter(event)" id="messageInput" placeholder="Type a message..." />
-                    <button onclick="sendMessage()">Send</button>
-                   </div>
-                  `;
+                         <div style="display: flex; align-items: center; width: 100%; gap: 10px">
+                          <input type="text" onkeydown="handleEnter(event)" id="messageInput" placeholder="Type a message..." />
+                          <button onclick="sendMessage()">Send</button>
+                         </div>
+                        `;
         if (!convo.querySelector('.input-area')) {
           convo.appendChild(inputArea);
         }
@@ -707,19 +808,24 @@
 
         fetchConversationKey(convo.conversationId, publicKeyPem).then((key) => {
           userDiv.innerHTML = `
-      <div class="horiFlex">
-        <div class="nameAndImage">
-          <img class="userImg" src="${convo.otherUserImage}" alt="User Image" />
-          <div class="lastMessageAndName">
-            <span class="username">@${convo.otherUsername}</span>
-            <p class="lastMessage">${decryptMessage(convo.lastMessage, key)}</p>
-          </div>
-        </div>
-      </div>
-      <div class="ago">
-        <span class="time">${formatTime(convo.lastMessageTime)}</span>
-      </div>
-    `;
+            <div class="horiFlex">
+              <div class="nameAndImage">
+                <img class="userImg" src="${
+                  convo.otherUserImage
+                }" alt="User Image" />
+                <div class="lastMessageAndName">
+                  <span class="username">@${convo.otherUsername}</span>
+                  <p class="lastMessage">${decryptMessage(
+                    convo.lastMessage,
+                    key
+                  )}</p>
+                </div>
+              </div>
+            </div>
+            <div class="ago">
+              <span class="time">${formatTime(convo.lastMessageTime)}</span>
+            </div>
+          `;
 
           userDiv.addEventListener('click', () =>
             handleUserClick(userDiv, convo)
@@ -742,9 +848,9 @@
         userDiv.classList.add('active');
 
         document.querySelector('.chat-header').innerHTML = `
-    <img src="${convo.otherUserImage}" alt="User Image" />
-    <span class="username">@${convo.otherUsername}</span>
-  `;
+          <img src="${convo.otherUserImage}" alt="User Image" />
+          <span class="username">@${convo.otherUsername}</span>
+        `;
 
         globalConversationId = convo.conversationId;
         console.log('Switching to conversation:', globalConversationId);
@@ -791,12 +897,12 @@
           replyPreview.classList.add('reply-preview');
           replyPreview.dataset.id = msg._id;
           replyPreview.innerHTML = `
-        <div class="replyFlex">
-          <span class="username">@${msg.sender.username}</span>
-          <span class="close-reply">❌</span>
-        </div>
-        <p>${decryptMessage(msg.text, key)}</p>
-      `;
+              <div class="replyFlex">
+                <span class="username">@${msg.sender.username}</span>
+                <span class="close-reply">❌</span>
+              </div>
+              <p>${decryptMessage(msg.text, key)}</p>
+            `;
 
           replyPreview
             .querySelector('.close-reply')
@@ -845,13 +951,13 @@
           replyPreviewDiv.classList.add('reply-preview-box');
           replyPreviewDiv.innerHTML = msg.replyingTo
             ? `<div class="reply-preview-content">
-          <strong>${
-            msg.replyingTo.sender?._id === myId
-              ? 'You'
-              : msg.replyingTo.sender?.username || 'Unknown'
-          }</strong> 
-          ${decryptMessage(msg.replyingTo.text, key)}
-        </div>`
+                <strong>${
+                  msg.replyingTo.sender?._id === myId
+                    ? 'You'
+                    : msg.replyingTo.sender?.username || 'Unknown'
+                }</strong>
+                ${decryptMessage(msg.replyingTo.text, key)}
+              </div>`
             : `<div class="reply-preview-content"><strong>Replying to</strong>: [Message not found]</div>`;
 
           messageDiv.prepend(replyPreviewDiv);
@@ -913,6 +1019,50 @@
         }
       }
 
+      socket.on('notification', async ({ sender, conversationId, message }) => {
+        const key = await fetchConversationKey(conversationId, publicKeyPem);
+
+        let nuMsg = decryptMessage(message, key);
+
+        console.log(nuMsg);
+        showNotification(sender, nuMsg, conversationId);
+        updateConversationLastMessage(conversationId, nuMsg);
+      });
+
+      async function showNotification(sender, message, conversationId) {
+        console.log(message);
+        const notificationContainer =
+          document.querySelector('.pushNotifications');
+
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = 'notification';
+        notification.innerHTML = `
+          <div class="notification-content">
+              <div class="notification-icon">
+                  <i class="fas fa-bell"></i>
+              </div>
+              <div class="notification-sender">${sender}</div>
+              <div class="notification-text">
+                  <span class="notification-title">New Message</span>
+                  <span class="notification-message">${message}</span>
+              </div>
+          </div>
+      `;
+
+        // Show the notification
+        notificationContainer.appendChild(notification);
+        notificationContainer.style.display = 'block';
+
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+          notification.remove();
+          if (notificationContainer.children.length === 0) {
+            notificationContainer.style.display = 'none';
+          }
+        }, 3000);
+      }
+
       async function sendMessage() {
         const messageInput = document.getElementById('messageInput');
         const rawMessage = messageInput.value.trim();
@@ -958,6 +1108,10 @@
       });
 
       socket.on('receiveMessage', ({ newMessage, conversationId }) => {
+        updateConversationLastMessage(
+          conversationId,
+          decryptMessage(newMessage.text, globalDecryptedKey)
+        );
         if (conversationId === globalConversationId) {
           addMessageToUI(
             newMessage,
@@ -1085,11 +1239,11 @@
           searchResults.innerHTML = users
             .map(
               (user) => `
-                <div data-id="${user.id}">
-                  ${user.username}
-                  <img src="${user.image}" alt="User Image" />
-                </div>
-              `
+                      <div data-id="${user.id}">
+                        ${user.username}
+                        <img src="${user.image}" alt="User Image" />
+                      </div>
+                    `
             )
             .join('');
         } catch (error) {
