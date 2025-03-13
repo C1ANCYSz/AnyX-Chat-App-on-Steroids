@@ -958,7 +958,9 @@
         document.querySelector('.chat-header').innerHTML = `
           <div style="display:flex; align-items:center; gap:10px" >  <img src="${convo.otherUserImage}" alt="User Image" />
             <span class="username">@${convo.otherUsername}</span></div>
-            <p class="call" onClick="callUser('${convo.otherUserId}') ">📞</p>
+            <p class="call" onClick="callUser('${convo.otherUserId}',false) ">📞</p>
+            <p class="call" onClick="callUser('${convo.otherUserId}',true) ">AAAA</p>
+            
           `;
 
         globalConversationId = convo.conversationId;
