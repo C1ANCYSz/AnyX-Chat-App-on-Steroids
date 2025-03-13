@@ -109,8 +109,9 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('offer', ({ offer, targetUserId }) => {
+  socket.on('offer', async ({ offer, targetUserId }) => {
     const receiverSocketId = users.get(targetUserId);
+    const user = await User.findById(targetUserId);
 
     console.log(`Offer from ${socket.id} to ${targetUserId}`);
 
@@ -119,6 +120,8 @@ io.on('connection', (socket) => {
       io.to(receiverSocketId).emit('incomingCall', {
         offer,
         senderId: socket.id,
+        username: user.username,
+        image: user.image,
       });
 
       console.log(`Incoming call from ${socket.id} to ${targetUserId}`);

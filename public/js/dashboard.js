@@ -149,11 +149,13 @@ peerConnection.ontrack = (event) => {
   });
 };
 
-socket.on('incomingCall', ({ offer, senderId }) => {
+socket.on('incomingCall', ({ offer, senderId, username, image }) => {
   const acceptOrReject = document.createElement('div');
   acceptOrReject.innerHTML = `
     <div class="incoming-call">
       <p>You have an incoming call.</p>
+      <img src="${image}" alt="${username}" style="width: 50px; height: 50px">
+      <h2>${username}</h2>
       <button id="acceptCall">Accept</button>
       <button id="rejectCall">Reject</button>
     </div>
