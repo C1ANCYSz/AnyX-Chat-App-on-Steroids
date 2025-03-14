@@ -148,6 +148,10 @@ body {
   width: fit-content;
 }
 
+.hidden {
+  display: none;
+}
+
 .input-area {
   display: flex;
   gap: 10px;

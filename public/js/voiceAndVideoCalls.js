@@ -16,6 +16,8 @@ remoteVideo.controls = false;
 localVideo.id = 'localVideo';
 localVideo.autoplay = true;
 localVideo.muted = true; // Mute local video to avoid feedback
+const remoteAudio = document.createElement('audio');
+remoteAudio.autoplay = true;
 
 const videosContainer = document.createElement('div');
 
@@ -31,12 +33,12 @@ remoteVideo.style.border = '2px solid red';
 videosContainer.appendChild(localVideo);
 videosContainer.appendChild(remoteVideo);
 
-async function callUser(userId) {
+async function callUser(userId, isVideoCall = false) {
   try {
     currentTargetUserId = userId;
     localStream = await navigator.mediaDevices.getUserMedia({
       audio: true,
-      video: true,
+      video: isVideoCall,
     });
 
     localVideo.srcObject = localStream;
@@ -46,14 +48,17 @@ async function callUser(userId) {
     });
 
     const offer = await peerConnection.createOffer();
-
     await peerConnection.setLocalDescription(offer);
 
-    socket.emit('offer', { offer, targetUserId: userId });
+    socket.emit('offer', { offer, targetUserId: userId, isVideoCall });
 
-    console.log('Calling user:', userId);
+    console.log('Calling user:', userId, 'Video call:', isVideoCall);
 
-    document.body.prepend(videosContainer);
+    if (isVideoCall) {
+      document.body.prepend(videosContainer);
+    } else {
+      document.body.appendChild(remoteAudio);
+    }
   } catch (error) {
     console.error('Error starting video call:', error);
     alert(
@@ -117,43 +122,53 @@ socket.on('candidate', (candidate) => {
 
 peerConnection.ontrack = (event) => {
   console.log('Received remote track:', event.streams[0]);
-  remoteVideo.srcObject = event.streams[0];
+
+  if (event.track.kind === 'video') {
+    remoteVideo.srcObject = event.streams[0];
+  } else if (event.track.kind === 'audio') {
+    remoteAudio.srcObject = event.streams[0];
+  }
 };
 
-socket.on('incomingCall', ({ offer, senderId, username, image }) => {
-  const acceptOrReject = document.createElement('div');
-  acceptOrReject.innerHTML = `
+socket.on(
+  'incomingCall',
+  ({ offer, senderId, username, image, isVideoCall }) => {
+    const acceptOrReject = document.createElement('div');
+    acceptOrReject.innerHTML = `
     <div class="incoming-call">
-      <p>Incoming video call...</p>
+      <p>Incoming call...</p>
       <img src="${image}" alt="${username}" style="width: 50px; height: 50px">
       <h2>${username}</h2>
       <button id="acceptCall">Accept</button>
       <button id="rejectCall">Reject</button>
     </div>
   `;
-  document.body.appendChild(acceptOrReject);
+    document.body.appendChild(acceptOrReject);
 
-  document.getElementById('acceptCall').addEventListener('click', () => {
-    acceptCall(offer, senderId);
-    acceptOrReject.remove();
-    document.body.prepend(videosContainer);
-  });
+    document
+      .getElementById('acceptCall')
+      .addEventListener('click', async () => {
+        acceptCall(offer, senderId, isVideoCall); // Use the correct call type
+        acceptOrReject.remove();
+      });
 
-  document.getElementById('rejectCall').addEventListener('click', () => {
-    socket.emit('callDeclined', { targetUserId: senderId });
-    acceptOrReject.remove();
-  });
-});
+    document.getElementById('rejectCall').addEventListener('click', () => {
+      socket.emit('callDeclined', { targetUserId: senderId });
+      acceptOrReject.remove();
+    });
+  }
+);
 
-async function acceptCall(offer, senderId) {
+async function acceptCall(offer, senderId, isVideoCall) {
   try {
     currentTargetUserId = senderId;
     localStream = await navigator.mediaDevices.getUserMedia({
       audio: true,
-      video: true,
+      video: isVideoCall,
     });
 
     localVideo.srcObject = localStream;
+
     localStream.getTracks().forEach((track) => {
       peerConnection.addTrack(track, localStream);
     });
@@ -164,9 +179,15 @@ async function acceptCall(offer, senderId) {
     await peerConnection.setLocalDescription(answer);
 
     socket.emit('answer', { answer, targetUserId: senderId });
-    console.log('Accepted video call!');
+
+    console.log('Accepted call with video:', isVideoCall);
+    if (isVideoCall) {
+      document.body.prepend(videosContainer);
+    } else {
+      document.body.appendChild(remoteAudio);
+    }
   } catch (error) {
-    console.error('Error accepting video call:', error);
+    console.error('Error accepting call:', error);
   }
 }
 

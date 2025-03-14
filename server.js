@@ -109,7 +109,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('offer', async ({ offer, targetUserId }) => {
+  socket.on('offer', async ({ offer, targetUserId, isVideoCall }) => {
     const receiverSocketId = users.get(targetUserId);
     const user = await User.findById(targetUserId);
 
@@ -121,6 +121,7 @@ io.on('connection', (socket) => {
         senderId: socket.id,
         username: user.username,
         image: user.image,
+        isVideoCall,
       });
 
       console.log(`Incoming call from ${socket.id} to ${targetUserId}`);

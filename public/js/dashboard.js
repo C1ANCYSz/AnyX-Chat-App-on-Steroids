@@ -1,12 +1,41 @@
-const notificationContainer = document.querySelector('.pushNotifications');
-notificationContainer.style.display = 'block';
+const elements = {
+  notificationContainer: document.querySelector('.pushNotifications'),
+  sidebar: document.querySelector('.sidebar'),
+  convo: document.querySelector('.convo'),
+  userList: document.querySelector('.user-list'),
+  messagesContainer: document.querySelector('.messages'),
+  loadingIndicator: document.querySelector('.loading'),
+  newChatButton: document.querySelector('.newChat'),
+  chatSearch: document.querySelector('.chatSearch'),
+  searchInput: document.getElementById('searchInput'),
+  searchButton: document.getElementById('searchButton'),
+  searchResults: document.querySelector('.searchResults'),
+  notificationContainer: document.querySelector('.pushNotifications'),
+};
 
-function toggleSidebar() {
-  const convo = document.querySelector('.convo');
+const state = {
+  page: 1,
+  limit: 50,
+  loading: false,
+  hasMore: true,
+  messagesPage: 1,
+  hasMoreMessages: true,
+  isLoading: false,
+  globalConversationId: null,
+  globalDecryptedKey: null,
+  globalMyId: null,
+  publicKeyPem: null,
+  privateKeyPem: null,
+};
 
-  const sidebar = document.querySelector('.sidebar');
-  sidebar.style.display = sidebar.style.display === 'block' ? 'none' : 'block';
-}
+const reactions = {
+  like: '👍',
+  love: '❤️',
+  haha: '😂',
+  wow: '😮',
+  sad: '😢',
+  angry: '😠',
+};
 
 const socket = io();
 
@@ -18,8 +47,12 @@ socket.emit('register', () => {
   console.log('Registered with the server');
 });
 
-let publicKeyPem;
-let privateKeyPem;
+elements.notificationContainer.style.display = 'block';
+
+function toggleSidebar() {
+  const sidebar = elements.sidebar;
+  sidebar.classList.toggle('hidden');
+}
 
 async function generateRSAKeys() {
   const keyPair = await window.crypto.subtle.generateKey(
@@ -33,17 +66,14 @@ async function generateRSAKeys() {
     ['encrypt', 'decrypt']
   );
 
-  publicKeyPem = await arrayBufferToPem(
+  state.publicKeyPem = await arrayBufferToPem(
     await window.crypto.subtle.exportKey('spki', keyPair.publicKey),
     'PUBLIC KEY'
   );
-  privateKeyPem = await arrayBufferToPem(
+  state.privateKeyPem = await arrayBufferToPem(
     await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey),
     'PRIVATE KEY'
   );
-}
-if (!window.crypto || !window.crypto.subtle) {
-  alert('Web Crypto API not supported');
 }
 
 function arrayBufferToPem(buffer, label) {
@@ -55,18 +85,15 @@ function arrayBufferToPem(buffer, label) {
 async function initializeKeysAndLoadConversations() {
   await generateRSAKeys();
 
-  const publicKey = publicKeyPem;
-  const privateKey = privateKeyPem;
-
   loadConversations();
 }
 
 async function encryptWithRSA(data) {
-  if (!publicKeyPem) {
+  if (!state.publicKeyPem) {
     throw new Error('Public key is not generated. Call generateRSAKeys first.');
   }
 
-  const publicKey = await importPublicKey(publicKeyPem);
+  const publicKey = await importPublicKey(state.publicKeyPem);
   const encodedData = new TextEncoder().encode(data);
 
   const encryptedData = await window.crypto.subtle.encrypt(
@@ -126,7 +153,7 @@ initializeKeysAndLoadConversations();
                */
 
 function joinConversation() {
-  const conversationId = globalConversationId;
+  const conversationId = state.globalConversationId;
   if (!conversationId) {
     alert('Please enter a conversation ID!');
     return;
@@ -159,32 +186,8 @@ function decryptWithRSA(encryptedData, privateKey) {
   }
 }
 
-const users = document.querySelectorAll('.user');
-const newChatButton = document.querySelector('.newChat');
-const chatSearch = document.querySelector('.chatSearch');
-const searchInput = document.getElementById('searchInput');
-const searchButton = document.getElementById('searchButton');
-const searchResults = document.querySelector('.searchResults');
-const userList = document.querySelector('.user-list');
-const loadingIndicator = document.querySelector('.loading');
-const messagesContainer = document.querySelector('.messages');
-const convo = document.querySelector('.convo');
-
-let page = 1;
-const limit = 50;
-let loading = false;
-let hasMore = true;
-
-let messagesPage = 1;
-let hasMoreMessages = true;
-let isLoading = false;
-
-let globalDecryptedKey;
-let globalMyId;
-let globalConversationId;
-
 function appendTextarea(conversationId) {
-  const convo = document.querySelector('.convo');
+  const convo = elements.convo;
   const inputArea = document.createElement('div');
   inputArea.classList.add('input-area');
   inputArea.innerHTML = `
@@ -223,16 +226,18 @@ function formatTime(timestamp) {
 
 async function loadConversations() {
   console.log('Loading conversations...');
-  if (loading || !hasMore) return;
+  if (state.loading || !state.hasMore) return;
 
-  loading = true;
-  loadingIndicator.style.display = 'block';
+  state.loading = true;
+  elements.loadingIndicator.style.display = 'block';
 
   try {
-    const response = await fetch(`/convos?page=${page}&limit=${limit}`);
+    const response = await fetch(
+      `/convos?page=${state.page}&limit=${state.limit}`
+    );
     const data = await response.json();
 
-    loadingIndicator.style.display = 'none';
+    elements.loadingIndicator.style.display = 'none';
 
     if (data.length === 0) {
       hasMore = false;
@@ -242,11 +247,11 @@ async function loadConversations() {
     await Promise.all(
       data.map(async (convo) => {
         const userDiv = createUserDiv(convo);
-        userList.appendChild(userDiv);
+        elements.userList.appendChild(userDiv);
       })
     );
 
-    page++;
+    state.page++;
   } catch (error) {
     console.error('Error loading conversations:', error);
   } finally {
@@ -259,7 +264,7 @@ function createUserDiv(convo) {
   userDiv.classList.add('user');
   userDiv.dataset.id = convo.conversationId;
 
-  fetchConversationKey(convo.conversationId, publicKeyPem).then((key) => {
+  fetchConversationKey(convo.conversationId, state.publicKeyPem).then((key) => {
     userDiv.innerHTML = `
         <div class="horiFlex">
           <div class="nameAndImage">
@@ -289,7 +294,7 @@ function createUserDiv(convo) {
 function handleUserClick(userDiv, convo) {
   if (userDiv.classList.contains('active')) return;
 
-  if (globalConversationId) {
+  if (state.globalConversationId) {
     leaveConversation();
   }
 
@@ -299,46 +304,41 @@ function handleUserClick(userDiv, convo) {
   userDiv.classList.add('active');
 
   document.querySelector('.chat-header').innerHTML = `
-    <div style="display:flex; align-items:center; gap:10px" >  <img src="${convo.otherUserImage}" alt="User Image" />
+    <div style="display:flex; align-items:center; gap:10px" >
+      <img src="${convo.otherUserImage}" alt="User Image" />
       <span class="username">@${convo.otherUsername}</span></div>
-     <div style="display:flex; align-items:center; gap:10px"; flex-direction:row>  <p class="call" onClick="callUser('${convo.otherUserId}',false) ">📞</p>
-      <p class="call" onClick="callUser('${convo.otherUserId}',true) ">🎥</p></div>
+     <div style="display:flex; align-items:center; gap:10px"; flex-direction:row>
+       <p class="call" onClick="callUser('${convo.otherUserId}',false) ">📞</p>
+      <p class="call" onClick="callUser('${convo.otherUserId}',true) ">🎥</p>
+      </div>
       
     `;
 
-  globalConversationId = convo.conversationId;
-  console.log('Switching to conversation:', globalConversationId);
+  state.globalConversationId = convo.conversationId;
+  console.log('Switching to conversation:', state.globalConversationId);
 
-  switchConversation(globalConversationId);
+  switchConversation(state.globalConversationId);
   joinConversation();
-  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  elements.messagesContainer.scrollTop =
+    elements.messagesContainer.scrollHeight;
   console.log(convo.otherUserId);
   appendTextarea(convo.conversationId);
 }
 
 function leaveConversation() {
-  socket.emit('leaveConversation', globalConversationId);
-  console.log(`Left conversation: ${globalConversationId}`);
+  socket.emit('leaveConversation', state.globalConversationId);
+  console.log(`Left conversation: ${state.globalConversationId}`);
 }
 
 // Scroll to load more conversations
-userList.addEventListener('scroll', () => {
+elements.userList.addEventListener('scroll', () => {
   if (
-    userList.scrollTop + userList.clientHeight >=
-    userList.scrollHeight - 50
+    elements.userList.scrollTop + elements.userList.clientHeight >=
+    elements.userList.scrollHeight - 50
   ) {
     loadConversations();
   }
 });
-
-const reactions = {
-  like: '👍',
-  love: '❤️',
-  haha: '😂',
-  wow: '😮',
-  sad: '😢',
-  angry: '😠',
-};
 
 function createActionButtons(msg, key) {
   const actionsDiv = document.createElement('div');
@@ -435,7 +435,7 @@ function createActionButtons(msg, key) {
 }
 
 function addMessageToUI(msg, myId, key, fetching = true, rece = false) {
-  if (!messagesContainer) {
+  if (!elements.messagesContainer) {
     console.error('messagesContainer not found!');
     return;
   }
@@ -484,50 +484,50 @@ function addMessageToUI(msg, myId, key, fetching = true, rece = false) {
   messageDiv.appendChild(actionAndMessage);
 
   if (rece) {
-    messagesContainer.appendChild(messageDiv); // Append new messages
+    elements.messagesContainer.appendChild(messageDiv); // Append new messages
   } else {
     fetching
-      ? messagesContainer.prepend(messageDiv) // Prepend fetched messages
-      : messagesContainer.appendChild(messageDiv);
+      ? elements.messagesContainer.prepend(messageDiv) // Prepend fetched messages
+      : elements.messagesContainer.appendChild(messageDiv);
   }
 }
 
 async function fetchMessages(conversationId) {
-  if (!hasMoreMessages || isLoading) return;
+  if (!state.hasMoreMessages || state.isLoading) return;
 
-  isLoading = true;
+  state.isLoading = true;
 
   try {
-    const key = await fetchConversationKey(conversationId, publicKeyPem);
-    globalDecryptedKey = key;
+    const key = await fetchConversationKey(conversationId, state.publicKeyPem);
+    state.globalDecryptedKey = key;
 
     const res = await fetch(
-      `/api/users/conversations/${conversationId}?page=${messagesPage}&limit=${limit}`
+      `/api/users/conversations/${conversationId}?page=${state.messagesPage}&limit=${state.limit}`
     );
 
     if (!res.ok) throw new Error(`Failed to fetch messages: ${res.statusText}`);
 
     const data = await res.json();
     const { conversation, myId, hasMoreMessages: more } = data;
-    hasMoreMessages = more;
-    globalMyId = myId;
+    state.hasMoreMessages = more;
+    state.globalMyId = myId;
 
     conversation.messages.forEach((msg) => addMessageToUI(msg, myId, key));
 
-    messagesContainer.scrollTop =
-      messagesPage === 1
-        ? messagesContainer.scrollHeight
-        : messagesContainer.scrollTop;
-    messagesPage++;
+    elements.messagesContainer.scrollTop =
+      state.messagesPage === 1
+        ? elements.messagesContainer.scrollHeight
+        : elements.messagesContainer.scrollTop;
+    state.messagesPage++;
   } catch (error) {
     console.error('Error fetching messages:', error);
   } finally {
-    isLoading = false;
+    state.isLoading = false;
   }
 }
 
 socket.on('notification', async ({ sender, conversationId, message }) => {
-  const key = await fetchConversationKey(conversationId, publicKeyPem);
+  const key = await fetchConversationKey(conversationId, state.publicKeyPem);
 
   let nuMsg = decryptMessage(message, key);
 
@@ -538,8 +538,7 @@ socket.on('notification', async ({ sender, conversationId, message }) => {
 
 async function showNotification(sender, message, conversationId) {
   console.log(message);
-  const notificationContainer = document.querySelector('.pushNotifications');
-
+  const notificationContainer = elements.notificationContainer;
   // Create notification element
   const notification = document.createElement('div');
   notification.className = 'notification';
@@ -579,12 +578,15 @@ async function sendMessage() {
   }
 
   try {
-    const encryptedMessage = encryptMessage(rawMessage, globalDecryptedKey);
+    const encryptedMessage = encryptMessage(
+      rawMessage,
+      state.globalDecryptedKey
+    );
     const replyingTo = document.querySelector('.reply-preview');
     const messageId = replyingTo?.dataset.id;
 
     socket.emit('sendMessage', {
-      conversationId: globalConversationId,
+      conversationId: state.globalConversationId,
       message: encryptedMessage,
       replyingTo: messageId || undefined,
     });
@@ -598,27 +600,41 @@ async function sendMessage() {
 }
 
 socket.on('messageSent', ({ newMessage, conversationId }) => {
-  if (conversationId === globalConversationId) {
-    addMessageToUI(newMessage, globalMyId, globalDecryptedKey, false, true);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  if (conversationId === state.globalConversationId) {
+    addMessageToUI(
+      newMessage,
+      state.globalMyId,
+      state.globalDecryptedKey,
+      false,
+      true
+    );
+    elements.messagesContainer.scrollTop =
+      elements.messagesContainer.scrollHeight;
   }
 });
 
 socket.on('receiveMessage', ({ newMessage, conversationId }) => {
   updateConversationLastMessage(
     conversationId,
-    decryptMessage(newMessage.text, globalDecryptedKey)
+    decryptMessage(newMessage.text, state.globalDecryptedKey)
   );
-  if (conversationId === globalConversationId) {
-    addMessageToUI(newMessage, globalMyId, globalDecryptedKey, false, true);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  if (conversationId === state.globalConversationId) {
+    addMessageToUI(
+      newMessage,
+      state.globalMyId,
+      state.globalDecryptedKey,
+      false,
+      true
+    );
+    elements.messagesContainer.scrollTop =
+      elements.messagesContainer.scrollHeight;
   }
 });
 
 function switchConversation(conversationId) {
-  messagesContainer.innerHTML = '';
-  messagesPage = 1;
-  hasMoreMessages = true;
+  elements.messagesContainer.innerHTML = '';
+  state.messagesPage = 1;
+  state.hasMoreMessages = true;
   fetchMessages(conversationId);
 }
 
@@ -638,17 +654,21 @@ async function fetchConversationKey(convoId, publicKey) {
 
     console.log('Fetched conversation key:', data.encryptedKey);
 
-    const decryptedKey = decryptWithRSA(data.encryptedKey, privateKeyPem);
-    globalDecryptedKey = decryptedKey;
-    console.log('active convo' + globalConversationId);
+    const decryptedKey = decryptWithRSA(data.encryptedKey, state.privateKeyPem);
+    state.globalDecryptedKey = decryptedKey;
+    console.log('active convo' + state.globalConversationId);
     return decryptedKey;
   } catch (err) {
     console.error('Error fetching conversation key:', err);
   }
 }
 
-messagesContainer.addEventListener('scroll', () => {
-  if (messagesContainer.scrollTop === 0 && hasMoreMessages && !isLoading) {
+elements.messagesContainer.addEventListener('scroll', () => {
+  if (
+    elements.messagesContainer.scrollTop === 0 &&
+    state.hasMoreMessages &&
+    !state.isLoading
+  ) {
     fetchMessages(document.querySelector('.user.active')?.dataset.id);
   }
 });
@@ -658,26 +678,26 @@ function getActiveConversationId() {
   return activeUser ? activeUser.dataset.id : null;
 }
 
-messagesContainer.addEventListener('scroll', () => {
-  if (messagesContainer.scrollTop === 0) {
+elements.messagesContainer.addEventListener('scroll', () => {
+  if (elements.messagesContainer.scrollTop === 0) {
     const conversationId = getActiveConversationId();
 
     // Save the current scroll position and height
-    const oldScrollTop = messagesContainer.scrollTop;
-    const oldHeight = messagesContainer.scrollHeight;
+    const oldScrollTop = elements.messagesContainer.scrollTop;
+    const oldHeight = elements.messagesContainer.scrollHeight;
 
     // Disable scrolling
 
     fetchMessages(conversationId).then(() => {
       // Use setTimeout to wait for the rendering to finish
       setTimeout(() => {
-        const newHeight = messagesContainer.scrollHeight;
+        const newHeight = elements.messagesContainer.scrollHeight;
 
         // Restore scroll position without any flicker
-        messagesContainer.scrollTop = newHeight - oldHeight;
+        elements.messagesContainer.scrollTop = newHeight - oldHeight;
 
         // Re-enable scrolling
-        messagesContainer.style.overflow = '';
+        elements.messagesContainer.style.overflow = '';
       }, 0);
     });
   }
@@ -690,18 +710,19 @@ function updateConversationLastMessage(conversationId, message) {
   }
 }
 
-newChatButton.addEventListener('click', () => {
-  chatSearch.style.display =
-    chatSearch.style.display === 'none' ? 'block' : 'none';
-  searchInput.focus();
+elements.newChatButton.addEventListener('click', () => {
+  elements.chatSearch.style.display =
+    elements.chatSearch.style.display === 'none' ? 'block' : 'none';
+  elements.searchInput.focus();
 });
 
-searchButton.addEventListener('click', () => {
-  const query = searchInput.value.trim();
+elements.searchButton.addEventListener('click', () => {
+  const query = elements.searchInput.value.trim();
   if (query) {
     searchUsers(query);
   } else {
-    searchResults.innerHTML = '<div>Please enter a username to search.</div>';
+    elements.searchResults.innerHTML =
+      '<div>Please enter a username to search.</div>';
   }
 });
 
@@ -711,11 +732,11 @@ async function searchUsers(query) {
     const users = await response.json();
 
     if (users.length === 0) {
-      searchResults.innerHTML = '<div>No users found.</div>';
+      elements.searchResults.innerHTML = '<div>No users found.</div>';
       return;
     }
 
-    searchResults.innerHTML = users
+    elements.searchResults.innerHTML = users
       .map(
         (user) => `
                   <div data-id="${user.id}">
@@ -727,12 +748,12 @@ async function searchUsers(query) {
       .join('');
   } catch (error) {
     console.error('Error searching users:', error);
-    searchResults.innerHTML =
+    elements.searchResults.innerHTML =
       '<div>Error searching users. Try again later.</div>';
   }
 }
 
-searchResults.addEventListener('click', (e) => {
+elements.searchResults.addEventListener('click', (e) => {
   if (e.target.dataset.id) {
     const userId = e.target.dataset.id;
     const username = e.target.innerText;
