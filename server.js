@@ -116,7 +116,6 @@ io.on('connection', (socket) => {
     console.log(`Offer from ${socket.id} to ${targetUserId}`);
 
     if (receiverSocketId) {
-      // Notify target user of the incoming call
       io.to(receiverSocketId).emit('incomingCall', {
         offer,
         senderId: socket.id,
