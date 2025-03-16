@@ -309,7 +309,7 @@ function handleUserClick(userDiv, convo) {
       <img src="${convo.otherUserImage}" alt="User Image" />
       <span class="username">@${convo.otherUsername}</span></div>
      <div style="display:flex; align-items:center; gap:10px"; flex-direction:row>
-       <p class="call" onClick="startCall('${convo.conversationId}',${state.globalMyId},false) ">📞</p>
+       <p class="call" onClick="startCall('${convo.conversationId}',false) ">📞</p>
       <p class="call" onClick="startCall('${convo.conversationId}',true) ">🎥</p>
       </div>
       

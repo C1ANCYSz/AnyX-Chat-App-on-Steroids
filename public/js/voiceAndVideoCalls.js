@@ -45,9 +45,8 @@ function makeDraggable(element) {
 
 makeDraggable(voiceCallContainer);
 
-async function startCall(conversationId, myId, isVideoCall = false) {
+async function startCall(conversationId, isVideoCall = false) {
   try {
-    console.log('myId', myId);
     console.log(`Starting call in conversation ${conversationId}`);
 
     localStream = await navigator.mediaDevices.getUserMedia({
