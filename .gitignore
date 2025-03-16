@@ -4,3 +4,6 @@ keys
 bundle.js
 keygen.js
 ssl
+.eslintrc.json
+.prettierrc
+.vscode

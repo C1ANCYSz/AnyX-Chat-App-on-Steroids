@@ -63,16 +63,16 @@ async function generateRSAKeys() {
       hash: 'SHA-256',
     },
     true,
-    ['encrypt', 'decrypt']
+    ['encrypt', 'decrypt'],
   );
 
   state.publicKeyPem = await arrayBufferToPem(
     await window.crypto.subtle.exportKey('spki', keyPair.publicKey),
-    'PUBLIC KEY'
+    'PUBLIC KEY',
   );
   state.privateKeyPem = await arrayBufferToPem(
     await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey),
-    'PRIVATE KEY'
+    'PRIVATE KEY',
   );
 }
 
@@ -101,7 +101,7 @@ async function encryptWithRSA(data) {
       name: 'RSA-OAEP',
     },
     publicKey,
-    encodedData
+    encodedData,
   );
 
   return arrayBufferToBase64(encryptedData);
@@ -117,7 +117,7 @@ async function importPublicKey(pem) {
       hash: 'SHA-256',
     },
     true,
-    ['encrypt']
+    ['encrypt'],
   );
 }
 
@@ -233,7 +233,7 @@ async function loadConversations() {
 
   try {
     const response = await fetch(
-      `/convos?page=${state.page}&limit=${state.limit}`
+      `/convos?page=${state.page}&limit=${state.limit}`,
     );
     const data = await response.json();
 
@@ -247,8 +247,9 @@ async function loadConversations() {
     await Promise.all(
       data.map(async (convo) => {
         const userDiv = createUserDiv(convo);
+        console.log(convo);
         elements.userList.appendChild(userDiv);
-      })
+      }),
     );
 
     state.page++;
@@ -275,7 +276,7 @@ function createUserDiv(convo) {
               <span class="username">@${convo.otherUsername}</span>
               <p class="lastMessage">${decryptMessage(
                 convo.lastMessage,
-                key
+                key,
               )}</p>
             </div>
           </div>
@@ -308,8 +309,8 @@ function handleUserClick(userDiv, convo) {
       <img src="${convo.otherUserImage}" alt="User Image" />
       <span class="username">@${convo.otherUsername}</span></div>
      <div style="display:flex; align-items:center; gap:10px"; flex-direction:row>
-       <p class="call" onClick="callUser('${convo.otherUserId}',false) ">📞</p>
-      <p class="call" onClick="callUser('${convo.otherUserId}',true) ">🎥</p>
+       <p class="call" onClick="startCall('${convo.conversationId}',${state.globalMyId},false) ">📞</p>
+      <p class="call" onClick="startCall('${convo.conversationId}',true) ">🎥</p>
       </div>
       
     `;
@@ -446,7 +447,7 @@ function addMessageToUI(msg, myId, key, fetching = true, rece = false) {
 
   messageDiv.classList.add(
     'message',
-    msg.sender?._id === myId ? 'sent' : 'received'
+    msg.sender?._id === myId ? 'sent' : 'received',
   );
   messageDiv.dataset.id = msg._id;
 
@@ -502,7 +503,7 @@ async function fetchMessages(conversationId) {
     state.globalDecryptedKey = key;
 
     const res = await fetch(
-      `/api/users/conversations/${conversationId}?page=${state.messagesPage}&limit=${state.limit}`
+      `/api/users/conversations/${conversationId}?page=${state.messagesPage}&limit=${state.limit}`,
     );
 
     if (!res.ok) throw new Error(`Failed to fetch messages: ${res.statusText}`);
@@ -580,7 +581,7 @@ async function sendMessage() {
   try {
     const encryptedMessage = encryptMessage(
       rawMessage,
-      state.globalDecryptedKey
+      state.globalDecryptedKey,
     );
     const replyingTo = document.querySelector('.reply-preview');
     const messageId = replyingTo?.dataset.id;
@@ -606,7 +607,7 @@ socket.on('messageSent', ({ newMessage, conversationId }) => {
       state.globalMyId,
       state.globalDecryptedKey,
       false,
-      true
+      true,
     );
     elements.messagesContainer.scrollTop =
       elements.messagesContainer.scrollHeight;
@@ -616,7 +617,7 @@ socket.on('messageSent', ({ newMessage, conversationId }) => {
 socket.on('receiveMessage', ({ newMessage, conversationId }) => {
   updateConversationLastMessage(
     conversationId,
-    decryptMessage(newMessage.text, state.globalDecryptedKey)
+    decryptMessage(newMessage.text, state.globalDecryptedKey),
   );
   if (conversationId === state.globalConversationId) {
     addMessageToUI(
@@ -624,7 +625,7 @@ socket.on('receiveMessage', ({ newMessage, conversationId }) => {
       state.globalMyId,
       state.globalDecryptedKey,
       false,
-      true
+      true,
     );
     elements.messagesContainer.scrollTop =
       elements.messagesContainer.scrollHeight;
@@ -743,7 +744,7 @@ async function searchUsers(query) {
                     ${user.username}
                     <img src="${user.image}" alt="User Image" />
                   </div>
-                `
+                `,
       )
       .join('');
   } catch (error) {

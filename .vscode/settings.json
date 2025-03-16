@@ -1,3 +1,10 @@
 {
-  "postman.settings.dotenv-detection-notification-visibility": false
+  "json.schemaDownload.enable": false,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "always"
+  },
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
+  "editor.formatOnPaste": true,
+  "editor.formatOnType": true
 }

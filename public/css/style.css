@@ -6,7 +6,7 @@ body {
   margin: 0;
   font-family: 'Poppins', sans-serif;
   background: linear-gradient(135deg, #1a1a1a 0%, #2e2e2e 100%);
-  background-image: url('/img/back.jpg');
+  background-image: url('../img/back.jpg');
   background-size: cover;
   backdrop-filter: blur(10px);
 }
@@ -151,6 +151,25 @@ body {
 .hidden {
   display: none;
 }
+.voice-call-container {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 400px;
+  height: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.8);
+  border: 2px solid #fff;
+  border-radius: 10px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  cursor: grab;
+}
 
 .input-area {
   display: flex;
@@ -159,6 +178,89 @@ body {
   background-color: #222;
   padding: 10px; /* top left bottom right */
   border-bottom-right-radius: 8px;
+}
+.videos-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.8);
+
+  border-radius: 10px;
+  display: none; /* Hidden by default */
+}
+
+.wrapper {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.videos {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 50px;
+}
+
+.video {
+  display: flex;
+  width: 100%;
+  max-width: 30%;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.local-video {
+  border: 2px solid #007bff;
+}
+
+.remote-video {
+  border: 2px solid #dc3545;
+}
+
+.video-controls {
+  display: flex;
+  flex-direction: row;
+  gap: 15px;
+  align-items: center;
+  justify-content: center;
+  background-color: #222;
+  width: fit-content;
+  padding: 12px 25px;
+  border-radius: 50px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+.control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 28px;
+  border-radius: 50%;
+  width: 55px;
+  height: 55px;
+  background: #333;
+  color: white;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+  outline: none;
+  border: none;
+}
+
+.control-btn:hover {
+  background-color: rebeccapurple;
+  transform: scale(1.1);
 }
 
 .input-area input {
@@ -600,11 +702,6 @@ body {
   to {
     transform: translateX(0);
   }
-}
-.videos-container {
-  z-index: 1000;
-  width: 100vh;
-  height: 100vh;
 }
 
 .call {

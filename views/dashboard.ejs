@@ -4,7 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Chat App</title>
-    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="./css/style.css" />
+    <link
+      href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <div class="newChat">+</div>
@@ -38,7 +42,36 @@
         </div>
       </div>
       <div class="pushNotifications"></div>
-      <audio style="display: none" id="remoteAudio" autoplay></audio>
+    </div>
+    <div
+      id="voiceCallContainer"
+      class="voice-call-container"
+      style="display: none"
+    >
+      <audio id="remoteAudio" autoplay></audio>
+    </div>
+
+    <div id="videosContainer" class="videos-container">
+      <div class="videos">
+        <video id="localVideo" class="video local-video" autoplay muted></video>
+      </div>
+      <div class="wrapper">
+        <div class="video-controls">
+          <div id="endVideoCall" class="control-btn">
+            <i class="bx bxs-phone-call" style="color: red"></i>
+          </div>
+          <div id="muteVIdeoCall" class="control-btn">
+            <i class="bx bxs-microphone-off"></i>
+          </div>
+          <div id="switchToVoice" class="control-btn">
+            <i class="bx bxs-camera-off"></i>
+          </div>
+
+          <div id="shareScreen" class="control-btn">
+            <i class="bx bx-desktop"></i>
+          </div>
+        </div>
+      </div>
     </div>
 
     <script src="/js/node-rsa-browser.js"></script>

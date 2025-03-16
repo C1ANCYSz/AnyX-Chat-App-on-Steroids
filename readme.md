@@ -13,7 +13,8 @@ This is a **secure chat application** built with the **MEN stack** (MongoDB, Exp
 - **Conversations:** Users can join, leave, and switch between conversations.
 - **Reactions & Replies:** React to messages and reply inline.
 - **Search & Notifications:** Search for users and receive live message notifications.
-- **Audio Calls:** Peer-to-peer call functionality using WebRTC.
+- **Audio Calls:** Peer-to-peer Voice call functionality using WebRTC.
+- **Video Calls:** Peer-to-peer Video call functionality using WebRTC.
 
 ## 🏗️ Project Structure
 
@@ -29,7 +30,6 @@ This is a **secure chat application** built with the **MEN stack** (MongoDB, Exp
 │   └── userRoutes.js         # User and conversation routes
 ├── views
 │   └── dashboard.ejs         # Chat app frontend (UI)
-├── ssl                      # SSL certificates for HTTPS
 ├── .env                     # Environment variables
 └── server.js                # Main server file
 ```

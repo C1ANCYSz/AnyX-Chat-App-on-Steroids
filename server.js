@@ -12,7 +12,7 @@ const Message = require('./models/Message');
 const Conversation = require('./models/Conversation');
 const User = require('./models/User');
 
-const users = new Map(); //for one server, multi servers should cache this with redis or something behind a load balancer
+const users = new Map(); // Map to store user IDs and their socket IDs (TO BE CACHED IN REDIS)
 
 mongoose
   .connect(process.env.MONGO_URI)
@@ -34,7 +34,7 @@ const verifyToken = (socket) => {
   }
 };
 
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
   console.log('User connected');
 
   socket.on('register', async () => {
@@ -89,9 +89,8 @@ io.on('connection', (socket) => {
         conversationId,
       });
 
-      // Notify all participants except the sender
       const participants = conversation.members.filter(
-        (id) => id.toString() !== decoded.id
+        (id) => id.toString() !== decoded.id,
       );
       participants.forEach((memberId) => {
         const receiverSocketId = users.get(memberId.toString());
@@ -109,38 +108,72 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('offer', async ({ offer, targetUserId, isVideoCall }) => {
-    const receiverSocketId = users.get(targetUserId);
-    const user = await User.findById(targetUserId);
+  socket.on('startCall', async ({ conversationId, isVideoCall, offer }) => {
+    try {
+      const decoded = verifyToken(socket);
+      const user = await User.findById(decoded.id);
+      if (!user) throw new Error('User not found');
 
-    console.log(`Offer from ${socket.id} to ${targetUserId}`);
+      const conversation = await Conversation.findById(conversationId);
+      if (!conversation) {
+        socket.emit('error', { message: 'Conversation not found' });
+        return;
+      }
 
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit('incomingCall', {
-        offer,
-        senderId: socket.id,
-        username: user.username,
-        image: user.image,
-        isVideoCall,
-      });
+      const callRoom = `call_${conversationId}`;
+      socket.join(callRoom);
 
-      console.log(`Incoming call from ${socket.id} to ${targetUserId}`);
-    } else {
-      socket.emit('error', { message: 'User is offline or not found' });
+      console.log(`User ${user.username} started a call in ${conversationId}`);
+
+      conversation.members
+        .filter((id) => id.toString() !== user._id.toString())
+        .forEach((memberId) => {
+          const receiverSocketId = users.get(memberId.toString());
+          if (receiverSocketId) {
+            io.to(receiverSocketId).emit('incomingCall', {
+              conversationId,
+              callerId: user._id,
+              callerName: user.username,
+              callerImage: user.image,
+              isVideoCall,
+              offer,
+            });
+          }
+        });
+    } catch (error) {
+      console.error('Error starting call:', error);
+      socket.emit('error', { message: 'Failed to start call' });
     }
   });
 
-  // Handle answer
-  socket.on('answer', ({ answer, targetUserId }) => {
-    io.to(targetUserId).emit('answer', answer);
+  socket.on('acceptCall', ({ conversationId, answer }) => {
+    const callRoom = `call_${conversationId}`;
+    console.log(`User accepted call in ${conversationId}`);
+
+    io.to(callRoom).emit('callAccepted', { answer });
   });
 
-  // Handle ICE candidates
-  socket.on('candidate', ({ candidate, targetUserId }) => {
-    io.to(targetUserId).emit('candidate', candidate);
+  socket.on('answer', ({ answer, conversationId }) => {
+    const callRoom = `call_${conversationId}`;
+    console.log(`Answer received for conversation ${conversationId}`);
+    io.to(callRoom).emit('callAccepted', { answer });
   });
+
+  socket.on('candidate', ({ candidate, conversationId }) => {
+    const callRoom = `call_${conversationId}`;
+    console.log(`ICE Candidate for ${conversationId}:`, candidate);
+    io.to(callRoom).emit('candidate', candidate);
+  });
+
+  socket.on('endCall', ({ conversationId, userId }) => {
+    console.log(`User ${userId} ended the call in ${conversationId}`);
+
+    socket.to(conversationId).emit('userLeft', { userId });
+  });
+
   socket.on('disconnect', () => {
     console.log('User disconnected');
+    socket.broadcast.emit('userLeft', { userId: socket.id });
     users.forEach((socketId, userId) => {
       if (socketId === socket.id) {
         users.delete(userId);
