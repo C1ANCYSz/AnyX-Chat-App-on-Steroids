@@ -19,7 +19,7 @@
       <div class="searchResults"></div>
     </div>
     <div class="container">
-      <button class="sidebar-toggle" onclick="toggleSidebar()">☰ Menu</button>
+      <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
 
       <div class="sidebar">
         <input type="text" class="search-bar" placeholder="Search users..." />
@@ -33,7 +33,7 @@
         </div>
       </div>
       <div class="convo">
-        <div class="chat-header"></div>
+        <div class="chat-header" style="display: none"></div>
         <div class="messages">
           <div class="placeHolder">
             <h1>select a user to chat with!</h1>
@@ -73,13 +73,22 @@
         </div>
       </div>
     </div>
+    <div
+      id="recordingIndicator"
+      class="recording-indicator"
+      style="display: none"
+    >
+      🎤 Recording... <span id="recordingTimer">00:00</span>
+    </div>
 
     <script src="/js/node-rsa-browser.js"></script>
 
     <script src="https://cdn.jsdelivr.net/npm/crypto-js@4.1.1/crypto-js.js"></script>
     <script src="/socket.io/socket.io.js"></script>
 
+    <script src="/js/voiceNotesAndMedia.js"></script>
     <script src="/js/dashboard.js"></script>
+
     <script src="/js/voiceAndVideoCalls.js"></script>
   </body>
 </html>

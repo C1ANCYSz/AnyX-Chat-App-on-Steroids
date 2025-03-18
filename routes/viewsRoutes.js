@@ -65,14 +65,14 @@ router.get('/convos', isVerified, async (req, res) => {
 
     const filteredConversations = conversations.map((convo) => {
       const otherUser = convo.members.find(
-        (member) => member._id.toString() !== req.user._id.toString()
+        (member) => member._id.toString() !== req.user._id.toString(),
       );
 
       return {
         conversationId: convo._id,
         otherUsername: otherUser?.username || 'Unknown User',
         otherUserImage: otherUser?.image || '/default-avatar.png',
-        lastMessage: convo.lastMessage?.text || 'No messages yet',
+        lastMessage: convo.lastMessage || 'No messages yet',
         lastMessageTime: convo.lastMessage?.timestamp,
         otherUserId: otherUser?._id,
       };

@@ -6,7 +6,9 @@ let isScreenSharing = false;
 let cameraStream = null;
 let isMuted = false;
 let isCameraOn = true;
-
+let callTimerInterval;
+let incomingCallerName;
+let incomingCallerImage;
 const voiceCallContainer = document.querySelector('#voiceCallContainer');
 const videosContainer = document.querySelector('#videosContainer');
 
@@ -74,7 +76,14 @@ async function startCall(conversationId, isVideoCall = false) {
   }
 }
 
-async function acceptCall(conversationId, isVideoCall, offer, callerId) {
+async function acceptCall(
+  conversationId,
+  isVideoCall,
+  offer,
+  callerId,
+  callerName,
+  callerImageSrc,
+) {
   try {
     console.log(`Joining call in conversation ${conversationId}`);
     callRoom = conversationId;
@@ -83,16 +92,17 @@ async function acceptCall(conversationId, isVideoCall, offer, callerId) {
       audio: true,
       video: isVideoCall,
     });
-
     document.querySelector('#localVideo').srcObject = localStream;
     setupPeerConnection(conversationId);
 
     await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-
     const answer = await peerConnection.createAnswer();
     await peerConnection.setLocalDescription(answer);
+    socket.emit('acceptCall', { conversationId, answer, myId: socket.id });
 
-    socket.emit('acceptCall', { conversationId, answer, callerId });
+    setupCallUI(callerName, incomingCallerImage);
+    startCallTimer();
+
     isVideoCall
       ? (videosContainer.style.display = 'block')
       : (voiceCallContainer.style.display = 'block');
@@ -101,11 +111,12 @@ async function acceptCall(conversationId, isVideoCall, offer, callerId) {
   }
 }
 
-socket.on('callAccepted', ({ answer }) => {
+socket.on('callAccepted', ({ answer, username, image }) => {
   console.log('Answer received. Setting remote description.');
   peerConnection
     .setRemoteDescription(new RTCSessionDescription(answer))
     .catch(console.error);
+
   if (window.pendingCandidates) {
     console.log(
       `Processing ${window.pendingCandidates.length} pending ICE candidates...`,
@@ -115,16 +126,71 @@ socket.on('callAccepted', ({ answer }) => {
     });
     window.pendingCandidates = [];
   }
+
+  setupCallUI(username, image);
+  startCallTimer();
 });
+
+function setupCallUI(callerName, callerImageSrc) {
+  voiceCallContainer.innerHTML = `
+  <div class="voice-call-container">
+  <div class="call-info-container">
+    <img src="${callerImageSrc}" class="caller-image">
+    <div class="caller-details">
+      <h1 class="caller-name">${callerName}</h1>
+      <h2 id="callTimer" class="call-timer">00:12</h2>
+    </div>
+  </div>
+
+  <div class="voice-controls">
+    <div id="endVoiceCall" onclick="endCall()" class="control-btn end-call">
+      <i class="bx bxs-phone-call"></i>
+    </div>
+    <div id="muteVoiceCall" onclick="toggleMute()" class="control-btn">
+      <i class="bx bxs-microphone-off"></i>
+    </div>
+    <div id="switchToVideo" onclick="toggleCamera()" class="control-btn">
+      <i class="bx bxs-camera-off"></i>
+    </div>
+  </div>
+</div>
+
+  `;
+}
+
+function startCallTimer() {
+  let timer = 0;
+
+  if (callTimerInterval) {
+    clearInterval(callTimerInterval);
+  }
+
+  callTimerInterval = setInterval(() => {
+    timer++;
+    const minutes = Math.floor(timer / 60);
+    const seconds = timer % 60;
+    const formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    document.getElementById('callTimer').textContent = formattedTime;
+  }, 1000);
+}
 
 socket.on(
   'incomingCall',
-  ({ conversationId, callerId, callerName, isVideoCall, offer }) => {
+  ({
+    conversationId,
+    callerId,
+    callerName,
+    callerImage,
+    isVideoCall,
+    offer,
+  }) => {
     console.log(`Incoming call from ${callerName}`);
-
-    const callUI = document.createElement('div');
+    incomingCallerImage = callerImage;
+    incomingCallerName = callerName;
+    callUI = document.createElement('div');
     callUI.innerHTML = `
       <div class="incoming-call">
+        <img src="${callerImage}" alt="${callerName}" style="width: 50px; height: 50px;" />
         <h2>${callerName} is calling...</h2>
         <button id="acceptCall">Accept</button>
         <button id="rejectCall">Reject</button>
@@ -133,7 +199,7 @@ socket.on(
     document.body.appendChild(callUI);
 
     document.getElementById('acceptCall').addEventListener('click', () => {
-      acceptCall(conversationId, isVideoCall, offer, callerId);
+      acceptCall(conversationId, isVideoCall, offer, callerId, callerName);
       callUI.remove();
     });
 
@@ -215,8 +281,6 @@ function setupPeerConnection(conversationId) {
   console.log(`Peer connection set up for conversation ${conversationId}`);
 }
 
-document.getElementById('endVideoCall').addEventListener('click', endCall);
-
 document.getElementById('shareScreen').addEventListener('click', async () => {
   if (!isScreenSharing) {
     startScreenShare();
@@ -291,54 +355,135 @@ async function stopScreenShare() {
   }
 }
 
-function endCall() {
-  console.log('Ending call...');
+async function terminateScreenShare() {
+  try {
+    if (!isScreenSharing) return;
 
-  if (peerConnection) {
-    peerConnection.close();
-    peerConnection = null;
+    const screenStream = document.getElementById('localVideo').srcObject;
+    if (screenStream) {
+      screenStream.getTracks().forEach((track) => track.stop());
+    }
+
+    const sender = peerConnection
+      ?.getSenders()
+      .find((s) => s.track?.kind === 'video');
+    if (sender) {
+      sender.replaceTrack(null);
+    }
+
+    document.getElementById('shareScreen').style.backgroundColor = '#333';
+
+    isScreenSharing = false;
+
+    console.log('Screen sharing terminated successfully.');
+  } catch (error) {
+    console.error('Error terminating screen share:', error);
   }
-
-  if (localStream) {
-    localStream.getTracks().forEach((track) => track.stop());
-    localStream = null;
-  }
-
-  socket.emit('endCall', { conversationId: callRoom, userId: socket.id });
-
-  videosContainer.style.display = 'none';
-  voiceCallContainer.style.display = 'none';
-
-  document.querySelectorAll('.remote-video').forEach((video) => video.remove());
-
-  document.querySelector('#localVideo').srcObject = null;
 }
 
-document.getElementById('muteVIdeoCall').addEventListener('click', () => {
-  const localStream = document.getElementById('localVideo').srcObject;
+async function endCall() {
+  console.log('Ending call...');
 
+  try {
+    if (localStream) {
+      localStream.getTracks().forEach((track) => {
+        track.stop();
+      });
+      localStream = null;
+    }
+
+    if (isScreenSharing) {
+      await terminateScreenShare();
+    }
+
+    if (peerConnection) {
+      peerConnection.getSenders().forEach((sender) => sender.track?.stop());
+      peerConnection.close();
+      peerConnection = null;
+    }
+
+    if (callTimerInterval) {
+      clearInterval(callTimerInterval);
+      callTimerInterval = null;
+    }
+
+    socket.emit('endCall', { conversationId: callRoom, userId: socket.id });
+
+    videosContainer.style.display = 'none';
+    voiceCallContainer.style.display = 'none';
+
+    document
+      .querySelectorAll('.remote-video')
+      .forEach((video) => video.remove());
+
+    document.querySelector('#localVideo').srcObject = null;
+
+    isMuted = false;
+    isCameraOn = false;
+    isScreenSharing = false;
+
+    console.log('Call ended successfully.');
+  } catch (error) {
+    console.error('Error ending call:', error);
+  }
+}
+
+document.getElementById('endVideoCall').addEventListener('click', async () => {
+  await endCall();
+});
+
+socket.on('endCall', async () => {
+  await endCall();
+});
+
+document.getElementById('muteVIdeoCall').addEventListener('click', () => {
   if (localStream) {
     const audioTrack = localStream.getAudioTracks()[0];
 
     if (audioTrack) {
       audioTrack.enabled = !audioTrack.enabled;
-
-      document.getElementById('muteVIdeoCall').style.backgroundColor =
-        audioTrack.enabled ? '#333' : 'rebeccapurple';
       isMuted = !audioTrack.enabled;
+
+      document.getElementById('muteVIdeoCall').style.backgroundColor = isMuted
+        ? 'rebeccapurple'
+        : '#333';
     }
   }
 });
 
-function toggleCamera() {
-  const localStream = document.getElementById('localVideo').srcObject;
+function toggleMute() {
+  if (!localStream) {
+    console.error('No active audio stream found.');
+    return;
+  }
+  const audioTrack = localStream.getAudioTracks()[0];
+  if (audioTrack) {
+    audioTrack.enabled = !audioTrack.enabled;
+    isMuted = !audioTrack.enabled;
 
+    document.getElementById('muteVoiceCall').style.backgroundColor = isMuted
+      ? 'rebeccapurple'
+      : '#333';
+
+    console.log(`Microphone is now ${isMuted ? 'Muted' : 'Unmuted'}`);
+  } else {
+    console.error('No audio track found in localStream.');
+  }
+}
+
+function toggleCamera() {
   if (localStream) {
     const videoTrack = localStream.getVideoTracks()[0];
 
     if (videoTrack) {
       videoTrack.enabled = !videoTrack.enabled;
       isCameraOn = videoTrack.enabled;
+
+      peerConnection.getSenders().forEach((sender) => {
+        if (sender.track?.kind === 'video') {
+          sender.track.enabled = videoTrack.enabled;
+        }
+      });
 
       document.getElementById('switchToVoice').style.backgroundColor =
         isCameraOn ? '#333' : 'rebeccapurple';

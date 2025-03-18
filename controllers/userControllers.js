@@ -5,6 +5,7 @@ const Message = require('../models/Message');
 const crypto = require('crypto');
 const fs = require('fs');
 const NodeRSA = require('node-rsa');
+
 require('express-async-errors');
 
 const privateKey = fs.readFileSync('./keys/private.pem', 'utf8');
@@ -31,7 +32,6 @@ function decryptWithRSA(encryptedData, privateKey) {
   }
 }
 
-// RSA encryption
 function encryptWithRSA(data, publicKey) {
   try {
     const key = new NodeRSA(publicKey, 'pkcs8-public-pem');
@@ -42,7 +42,6 @@ function encryptWithRSA(data, publicKey) {
   }
 }
 
-// API to handle key exchange
 exports.getConversationKey = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -54,24 +53,20 @@ exports.getConversationKey = async (req, res, next) => {
 
     if (!conversation.members.includes(req.user._id)) {
       return next(
-        new AppError('Unauthorized access to this conversation', 403)
+        new AppError('Unauthorized access to this conversation', 403),
       );
     }
 
-    // Check Redis cache for the decrypted key
     let decryptedKey = await client.get(`convKey:${id}`);
 
     if (!decryptedKey) {
-      // Decrypt AES key with server's private key
       decryptedKey = decryptWithRSA(conversation.key, privateKey);
       if (!decryptedKey)
         return next(new AppError('Failed to decrypt conversation key', 500));
 
-      // Cache the decrypted key with a TTL (e.g., 1 hour)
       await client.setEx(`convKey:${id}`, 3600, decryptedKey);
     }
 
-    // Encrypt AES key with client’s public key
     const encryptedKey = encryptWithRSA(decryptedKey, publicKey);
     if (!encryptedKey)
       return next(new AppError('Failed to encrypt conversation key', 500));
@@ -96,7 +91,7 @@ exports.searchUsers = async (req, res) => {
       users.map((user) => ({
         id: user._id,
         username: user.username,
-      }))
+      })),
     );
   } catch (err) {
     console.error(err);
@@ -110,7 +105,6 @@ exports.getConversation = async (req, res, next) => {
     const { id } = req.params;
     const { page = 1, limit = 50 } = req.query;
 
-    // Validate and sanitize pagination inputs
     const pageNum = Math.max(parseInt(page, 10), 1);
     const limitNum = Math.min(Math.max(parseInt(limit, 10), 1), 50);
 
@@ -122,16 +116,14 @@ exports.getConversation = async (req, res, next) => {
       return next(new AppError('Conversation not found', 404));
     }
 
-    // Check if the user is part of the conversation
     if (
       !conversation.members.some((member) => member._id.toString() === myId)
     ) {
       return next(
-        new AppError('Unauthorized access to this conversation', 403)
+        new AppError('Unauthorized access to this conversation', 403),
       );
     }
 
-    // Paginated message fetch
     const messages = await Message.find({ conversation: id })
       .populate('sender', 'username profileImage')
       .populate({
@@ -148,7 +140,6 @@ exports.getConversation = async (req, res, next) => {
       .lean({ virtuals: true });
     conversation.messages = messages;
 
-    // Check for more messages
     const hasMoreMessages = messages.length === limitNum && messages.length > 0;
 
     res.status(200).json({ conversation, myId, hasMoreMessages });
@@ -174,25 +165,36 @@ exports.sendMessage = async (req, res, next) => {
       return next(new AppError('Conversation not found', 404));
     }
 
-    // Create and save the new message
     const newMessage = await Message.create({
       text: message,
       sender: req.user._id,
       conversation: id,
     });
 
-    // Update the lastMessage in the conversation
     conversation = await Conversation.findByIdAndUpdate(
       id,
       {
         $set: { lastMessage: newMessage._id },
       },
-      { new: true }
+      { new: true },
     );
 
     res.status(200).json(newMessage);
   } catch (err) {
     console.log(err.message);
     next(new AppError('Failed to send message', 500));
+  }
+};
+
+exports.uploadMedia = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    res.json({ secure_url: req.file.path });
+  } catch (error) {
+    console.error('Upload error:', error);
+    res.status(500).json({ error: 'Upload failed' });
   }
 };

@@ -51,7 +51,7 @@ elements.notificationContainer.style.display = 'block';
 
 function toggleSidebar() {
   const sidebar = elements.sidebar;
-  sidebar.classList.toggle('hidden');
+  sidebar.classList.toggle('open');
 }
 
 async function generateRSAKeys() {
@@ -191,18 +191,132 @@ function appendTextarea(conversationId) {
   const inputArea = document.createElement('div');
   inputArea.classList.add('input-area');
   inputArea.innerHTML = `
-                     <div style="display: flex; align-items: center; width: 100%; gap: 10px">
-                      <input type="text" onkeydown="handleEnter(event)" id="messageInput" placeholder="Type a message..." />
-                      <button onclick="sendMessage()">Send</button>
-                     </div>
-                    `;
+    <div style="display: flex; align-items: center; width: 100%; gap: 10px">
+      <input type="text" onkeydown="handleEnter(event)" id="messageInput" placeholder="Type a message..." oninput="toggleSendButton()" />
+      <button id="sendMessageBtn" onclick="sendMessage()" style="display: none;"><i class='bx bxs-send sendIcons'></i></button>
+      <button id="sendVoiceMessageBtn" onclick="toggleVoiceRecording('${conversationId}')"><i class='bx bxs-microphone-alt sendIcons' style='color:#ffffff' ></i></button>
+      <button onclick="sendMedia()"><i class='bx bx-images sendIcons'></i></button>
+    </div>
+  `;
+
   if (!convo.querySelector('.input-area')) {
     convo.appendChild(inputArea);
+  }
+
+  inputArea.addEventListener('input', () => {
+    socket.emit('typing', { conversationId, userId: socket.id });
+  });
+}
+
+socket.on('typing', ({ conversationId, userId }) => {
+  if (conversationId !== state.globalConversationId) return; // Ignore if not in the same conversation
+
+  const typingIndicator = document.getElementById('typingIndicator');
+  if (!typingIndicator) {
+    const indicator = document.createElement('div');
+    indicator.id = 'typingIndicator';
+    indicator.innerHTML = '<span>.</span><span>.</span><span>.</span>';
+    indicator.style.fontWeight = '800';
+    indicator.style.height = '25px';
+    indicator.style.width = '30px';
+    indicator.style.padding = '10px';
+    indicator.style.borderRadius = '8px 8px 8px 0';
+    indicator.style.textAlign = 'center';
+    indicator.style.backgroundColor = 'white';
+
+    indicator.style.color = 'black';
+    indicator.style.marginTop = '5px';
+    const spans = indicator.querySelectorAll('span');
+    spans.forEach((dot, index) => {
+      dot.style.animation = `jump 1.5s infinite`;
+      dot.style.animationDelay = `${index * 0.2}s`; // Staggered animation
+    });
+    elements.messagesContainer.scrollTop =
+      elements.messagesContainer.scrollHeight;
+    document.querySelector('.messages').appendChild(indicator);
+  }
+
+  // Remove typing indicator after 3 seconds of no typing activity
+  clearTimeout(window.typingTimeout);
+  window.typingTimeout = setTimeout(() => {
+    const indicator = document.getElementById('typingIndicator');
+    if (indicator) indicator.remove();
+  }, 500);
+});
+
+function sendMedia() {
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'image/*, video/*'; // Accept images and videos
+
+  fileInput.addEventListener('change', async (event) => {
+    const file = event.target.files[0];
+
+    if (!file) {
+      console.warn('No file selected');
+      return;
+    }
+
+    console.log('Selected file:', file);
+
+    // Prepare form data to send to the server
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', 'your_upload_preset'); // Cloudinary preset (set this in Cloudinary)
+
+    try {
+      // Send the file to your server (which will then upload it to Cloudinary)
+      const response = await fetch(
+        `/api/users/conversations/${state.globalConversationId}/upload-media`,
+        {
+          method: 'POST',
+          body: formData,
+        },
+      );
+
+      const data = await response.json();
+
+      if (data.secure_url) {
+        console.log('Media uploaded successfully:', data.secure_url);
+        const replyingTo = document.querySelector('.reply-preview');
+        const messageId = replyingTo?.dataset.id;
+        // Notify other users via WebSocket
+        socket.emit('sendMessage', {
+          conversationId: state.globalConversationId,
+          replyingTo: messageId || undefined,
+          message: data.secure_url,
+          type: 'image',
+        });
+
+        console.log('Media sent via socket.');
+      } else {
+        console.error('Error uploading media:', data);
+      }
+    } catch (error) {
+      console.error('Error sending media:', error);
+    }
+  });
+
+  fileInput.click(); // Trigger the file picker
+}
+
+function toggleSendButton() {
+  const messageInput = document.getElementById('messageInput');
+  const sendMessageBtn = document.getElementById('sendMessageBtn');
+  const sendVoiceMessageBtn = document.getElementById('sendVoiceMessageBtn');
+
+  if (messageInput.value.trim() === '') {
+    sendMessageBtn.style.display = 'none';
+    sendVoiceMessageBtn.style.display = 'inline-block';
+  } else {
+    sendMessageBtn.style.display = 'inline-block';
+    sendVoiceMessageBtn.style.display = 'none';
   }
 }
 
 function handleEnter(event) {
   if (event.key === 'Enter') {
+    event.preventDefault();
     sendMessage();
   }
 }
@@ -246,7 +360,7 @@ async function loadConversations() {
 
     await Promise.all(
       data.map(async (convo) => {
-        const userDiv = createUserDiv(convo);
+        const userDiv = await createUserDiv(convo);
         console.log(convo);
         elements.userList.appendChild(userDiv);
       }),
@@ -260,31 +374,44 @@ async function loadConversations() {
   }
 }
 
-function createUserDiv(convo) {
+async function createUserDiv(convo) {
   const userDiv = document.createElement('div');
   userDiv.classList.add('user');
   userDiv.dataset.id = convo.conversationId;
 
+  let lastMessageText = 'Unknown Message Type';
+
+  const key = await fetchConversationKey(
+    convo.conversationId,
+    state.publicKeyPem,
+  );
+  console.log(key);
+
+  if (convo.lastMessage?.type === 'text') {
+    lastMessageText = decryptMessage(convo.lastMessage.text, key);
+  } else if (convo.lastMessage?.type === 'voice') {
+    lastMessageText = 'Voice Message';
+  } else if (convo.lastMessage?.type === 'image') {
+    lastMessageText = 'Image';
+  }
+
   fetchConversationKey(convo.conversationId, state.publicKeyPem).then((key) => {
     userDiv.innerHTML = `
-        <div class="horiFlex">
-          <div class="nameAndImage">
-            <img class="userImg" src="${
-              convo.otherUserImage
-            }" alt="User Image" />
-            <div class="lastMessageAndName">
-              <span class="username">@${convo.otherUsername}</span>
-              <p class="lastMessage">${decryptMessage(
-                convo.lastMessage,
-                key,
-              )}</p>
-            </div>
-          </div>
-        </div>
-        <div class="ago">
-          <span class="time">${formatTime(convo.lastMessageTime)}</span>
-        </div>
-      `;
+  <div class="horiFlex">
+    <div class="nameAndImage">
+      <img class="userImg" src="${convo.otherUserImage}" alt="User Image" />
+      <div class="lastMessageAndName">
+        <span class="username">@${convo.otherUsername}</span>
+        <p class="lastMessage">${lastMessageText}</p>
+      </div>
+    </div>
+  </div>
+  <div class="ago">
+    <span class="time" data-timestamp="${convo.lastMessageTime}">
+      ${formatTime(convo.lastMessageTime)}
+    </span>
+  </div>
+`;
 
     userDiv.addEventListener('click', () => handleUserClick(userDiv, convo));
   });
@@ -303,14 +430,15 @@ function handleUserClick(userDiv, convo) {
     .querySelectorAll('.user')
     .forEach((u) => u.classList.remove('active'));
   userDiv.classList.add('active');
-
-  document.querySelector('.chat-header').innerHTML = `
-    <div style="display:flex; align-items:center; gap:10px" >
+  const chatHeader = document.querySelector('.chat-header');
+  chatHeader.style.display = 'flex';
+  chatHeader.innerHTML = `
+    <div style="display:flex; align-items:center; gap:10px; margin-left:40px" >
       <img src="${convo.otherUserImage}" alt="User Image" />
       <span class="username">@${convo.otherUsername}</span></div>
      <div style="display:flex; align-items:center; gap:10px"; flex-direction:row>
-       <p class="call" onClick="startCall('${convo.conversationId}',false) ">📞</p>
-      <p class="call" onClick="startCall('${convo.conversationId}',true) ">🎥</p>
+       <p class="call" onClick="startCall('${convo.conversationId}',false) "><i class='bx bxs-phone-call sendIcons callIcons'  style='color:#fff'></i></p>
+      <p class="call" onClick="startCall('${convo.conversationId}',true) "><i class='bx bxs-video sendIcons callIcons' style='color:#fff' ></i></p>
       </div>
       
     `;
@@ -366,7 +494,7 @@ function createActionButtons(msg, key) {
     <span class="username">@${msg.sender.username}</span>
     <span class="close-reply">❌</span>
   </div>
-  <p>${decryptMessage(msg.text, key)}</p>
+  <p>${msg.type === 'text' ? decryptMessage(msg.text, key) : msg.type === 'image' ? 'Image' : 'Voice Message'}</p>
 `;
 
     replyPreview.querySelector('.close-reply').addEventListener('click', () => {
@@ -442,21 +570,18 @@ function addMessageToUI(msg, myId, key, fetching = true, rece = false) {
   }
 
   const messageDiv = document.createElement('div');
-  const messageContent = document.createElement('p');
-  const actionsDiv = createActionButtons(msg, key);
-
   messageDiv.classList.add(
     'message',
     msg.sender?._id === myId ? 'sent' : 'received',
   );
   messageDiv.dataset.id = msg._id;
 
-  messageContent.textContent =
-    fetching || rece ? decryptMessage(msg.text, key) : msg.text;
-
   const actionAndMessage = document.createElement('div');
   actionAndMessage.classList.add('actionAndMessage');
 
+  const actionsDiv = createActionButtons(msg, key);
+
+  // Handle replies
   if (msg.replyingTo) {
     const replyPreviewDiv = document.createElement('div');
     replyPreviewDiv.classList.add('reply-preview-box');
@@ -474,6 +599,35 @@ function addMessageToUI(msg, myId, key, fetching = true, rece = false) {
     messageDiv.prepend(replyPreviewDiv);
   }
 
+  // Handle different message types
+  let messageContent;
+  if (msg.type === 'text') {
+    messageContent = document.createElement('p');
+    messageContent.textContent =
+      fetching || rece ? decryptMessage(msg.text, key) : msg.text;
+  } else if (msg.type === 'voice') {
+    messageContent = createCustomVoiceMessageElement(
+      msg,
+      msg.sender?._id === myId,
+    );
+  } else if (msg.type === 'image') {
+    messageContent = document.createElement('img');
+    messageContent.src = msg.text; // Assuming `msg.text` is a Base64 or URL
+    messageContent.style.maxWidth = '250px'; // Adjust size
+    messageContent.style.borderRadius = '8px';
+    messageContent.style.border =
+      msg.sender?._id === myId
+        ? '1px solid rebeccapurple'
+        : '1px solid lightgray';
+    messageContent.alt = 'Image Message';
+    messageContent.style.cursor = 'pointer';
+    messageContent.addEventListener('click', () => showImagePreview(msg.text));
+  } else {
+    messageContent = document.createElement('p');
+    messageContent.textContent = '[Unsupported message type]';
+  }
+
+  // Append message content and actions
   if (messageDiv.classList.contains('sent')) {
     actionAndMessage.appendChild(actionsDiv);
     actionAndMessage.appendChild(messageContent);
@@ -484,13 +638,133 @@ function addMessageToUI(msg, myId, key, fetching = true, rece = false) {
 
   messageDiv.appendChild(actionAndMessage);
 
+  // Add message to the container
   if (rece) {
-    elements.messagesContainer.appendChild(messageDiv); // Append new messages
+    elements.messagesContainer.appendChild(messageDiv);
   } else {
     fetching
-      ? elements.messagesContainer.prepend(messageDiv) // Prepend fetched messages
+      ? elements.messagesContainer.prepend(messageDiv)
       : elements.messagesContainer.appendChild(messageDiv);
   }
+}
+function showImagePreview(imageSrc) {
+  // Create overlay
+  const overlay = document.createElement('div');
+  overlay.style.position = 'fixed';
+  overlay.style.top = '0';
+  overlay.style.left = '0';
+  overlay.style.width = '100vw';
+  overlay.style.height = '100vh';
+  overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.8)'; // Dark background
+  overlay.style.display = 'flex';
+  overlay.style.justifyContent = 'center';
+  overlay.style.alignItems = 'center';
+  overlay.style.zIndex = '1000';
+
+  // Create full-screen image
+  const image = document.createElement('img');
+  image.src = imageSrc;
+  image.style.maxWidth = '90vw';
+  image.style.maxHeight = '90vh';
+  image.style.borderRadius = '10px';
+  image.style.boxShadow = '0px 0px 20px rgba(255, 255, 255, 0.3)';
+
+  // Close image on click
+  overlay.addEventListener('click', () => {
+    document.body.removeChild(overlay);
+  });
+
+  overlay.appendChild(image);
+  document.body.appendChild(overlay);
+}
+
+function createCustomVoiceMessageElement(msg, isMine) {
+  const messageWrapper = document.createElement('div');
+  messageWrapper.classList.add('voice-message');
+
+  // Styling for sender vs receiver
+  messageWrapper.style.backgroundColor = isMine ? 'rebeccapurple' : 'white';
+  messageWrapper.style.color = isMine ? 'white' : 'black';
+  messageWrapper.style.padding = '10px';
+  messageWrapper.style.borderRadius = '10px';
+  messageWrapper.style.margin = '5px 0';
+  messageWrapper.style.display = 'flex';
+  messageWrapper.style.alignItems = 'center';
+  messageWrapper.style.maxWidth = '250px';
+  messageWrapper.style.gap = '10px';
+
+  // Play/Pause Button
+  const playPauseButton = document.createElement('button');
+  playPauseButton.innerHTML = `<i class='bx bx-play'></i>`; // Play icon
+  playPauseButton.style.border = 'none';
+  playPauseButton.style.background = 'transparent';
+  playPauseButton.style.cursor = 'pointer';
+  playPauseButton.style.fontSize = '20px';
+
+  // Progress Bar
+  const progressBar = document.createElement('div');
+  progressBar.style.height = '5px';
+  progressBar.style.width = '100px';
+  progressBar.style.backgroundColor = isMine ? 'white' : 'lightgray';
+  progressBar.style.borderRadius = '3px';
+  progressBar.style.position = 'relative';
+
+  // Progress Indicator
+  const progressIndicator = document.createElement('div');
+  progressIndicator.style.height = '100%';
+  progressIndicator.style.width = '0%';
+  progressIndicator.style.backgroundColor = isMine ? 'blue' : 'black';
+  progressIndicator.style.borderRadius = '3px';
+  progressIndicator.style.position = 'absolute';
+
+  progressBar.appendChild(progressIndicator);
+
+  // Timer
+  const timer = document.createElement('span');
+  timer.textContent = '0:00';
+  timer.style.fontSize = '12px';
+
+  // Hidden Audio Element
+  const audio = new Audio();
+  audio.src = `data:audio/webm;base64,${msg.text}`;
+
+  // Event Listeners for Play/Pause
+  playPauseButton.addEventListener('click', () => {
+    if (audio.paused) {
+      audio.play();
+      playPauseButton.innerHTML = `<i class='bx bx-pause' style='color:#ffffff' ></i>`; // Pause icon
+    } else {
+      audio.pause();
+      playPauseButton.innerHTML = `<i class='bx bx-play'></i>`;
+    }
+  });
+
+  // Update Progress Bar
+  audio.addEventListener('timeupdate', () => {
+    const progress = (audio.currentTime / audio.duration) * 100;
+    progressIndicator.style.width = `${progress}%`;
+    timer.textContent = formatTime(audio.currentTime);
+  });
+
+  // Reset when audio ends
+  audio.addEventListener('ended', () => {
+    playPauseButton.innerHTML = `<i class='bx bx-play'></i>`;
+    progressIndicator.style.width = '0%';
+    timer.textContent = '0:00';
+  });
+
+  // Format Time (Helper Function)
+  function formatTime(seconds) {
+    const min = Math.floor(seconds / 60);
+    const sec = Math.floor(seconds % 60);
+    return `${min}:${sec.toString().padStart(2, '0')}`;
+  }
+
+  messageWrapper.appendChild(playPauseButton);
+  messageWrapper.appendChild(progressBar);
+  messageWrapper.appendChild(timer);
+
+  return messageWrapper;
 }
 
 async function fetchMessages(conversationId) {
@@ -530,11 +804,10 @@ async function fetchMessages(conversationId) {
 socket.on('notification', async ({ sender, conversationId, message }) => {
   const key = await fetchConversationKey(conversationId, state.publicKeyPem);
 
-  let nuMsg = decryptMessage(message, key);
-
-  console.log(nuMsg);
-  showNotification(sender, nuMsg, conversationId);
-  updateConversationLastMessage(conversationId, nuMsg);
+  if (state.globalConversationId !== conversationId) {
+    showNotification(sender, message, conversationId);
+  }
+  updateConversationLastMessage(conversationId, message);
 });
 
 async function showNotification(sender, message, conversationId) {
@@ -551,7 +824,18 @@ async function showNotification(sender, message, conversationId) {
           <div class="notification-sender">${sender}</div>
           <div class="notification-text">
               <span class="notification-title">New Message</span>
-              <span class="notification-message">${message}</span>
+             <span class="notification-message">
+  ${
+    message.type === 'text'
+      ? decryptMessage(message.text, state.globalDecryptedKey)
+      : message.type === 'image'
+        ? 'Image'
+        : message.type === 'voice'
+          ? 'Voice Message'
+          : ''
+  }
+</span>
+
           </div>
       </div>
   `;
@@ -590,9 +874,11 @@ async function sendMessage() {
       conversationId: state.globalConversationId,
       message: encryptedMessage,
       replyingTo: messageId || undefined,
+      type: 'text',
     });
 
     messageInput.value = '';
+    toggleSendButton();
     if (replyingTo) replyingTo.remove();
   } catch (error) {
     console.error('Error sending message:', error);
@@ -615,10 +901,7 @@ socket.on('messageSent', ({ newMessage, conversationId }) => {
 });
 
 socket.on('receiveMessage', ({ newMessage, conversationId }) => {
-  updateConversationLastMessage(
-    conversationId,
-    decryptMessage(newMessage.text, state.globalDecryptedKey),
-  );
+  updateConversationLastMessage(conversationId, newMessage);
   if (conversationId === state.globalConversationId) {
     addMessageToUI(
       newMessage,
@@ -629,6 +912,9 @@ socket.on('receiveMessage', ({ newMessage, conversationId }) => {
     );
     elements.messagesContainer.scrollTop =
       elements.messagesContainer.scrollHeight;
+  }
+  if (document.getElementById('typingIndicator')) {
+    document.getElementById('typingIndicator').remove();
   }
 });
 
@@ -707,9 +993,43 @@ elements.messagesContainer.addEventListener('scroll', () => {
 function updateConversationLastMessage(conversationId, message) {
   const userDiv = document.querySelector(`.user[data-id="${conversationId}"]`);
   if (userDiv) {
-    userDiv.querySelector('.lastMessage').textContent = message;
+    if (message.type === 'text') {
+      userDiv.querySelector('.lastMessage').textContent = decryptMessage(
+        message.text,
+        state.globalDecryptedKey,
+      );
+    } else if (message.type === 'voice') {
+      userDiv.querySelector('.lastMessage').textContent = 'Voice Message';
+    } else if (message.type === 'image') {
+      userDiv.querySelector('.lastMessage').textContent = 'Image';
+    }
+
+    const timeElement = userDiv.querySelector('.ago .time');
+    const messageTime = timeElement?.dataset.timestamp;
+    if (timeElement) {
+      const formattedTimestamp = new Date(messageTime).toISOString(); // Ensure correct ISO 8601 format
+      timeElement.dataset.timestamp = formattedTimestamp; // Store as ISO 8601
+      timeElement.textContent = formatTime(
+        Date.now() - new Date(messageTime).getTime(),
+      );
+    }
   }
 }
+
+function updateTimeAgo() {
+  document.querySelectorAll('.ago .time').forEach((timeElement) => {
+    const timestampStr = timeElement.dataset.timestamp;
+    if (!timestampStr) return;
+
+    const timestampMs = new Date(timestampStr).getTime(); // Convert ISO 8601 to milliseconds
+    if (isNaN(timestampMs)) return; // Prevent invalid timestamps
+
+    const elapsedTime = Date.now() - timestampMs;
+    timeElement.textContent = formatTime(elapsedTime);
+  });
+}
+
+setInterval(updateTimeAgo, 60000); // Update every minute
 
 elements.newChatButton.addEventListener('click', () => {
   elements.chatSearch.style.display =
