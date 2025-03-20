@@ -491,7 +491,7 @@ body {
 
 .reply-preview .close-reply {
   cursor: pointer;
-  color: #ff4d4d;
+  color: fff;
   font-weight: bold;
   font-size: 18px;
   padding: 2px 6px;
@@ -499,10 +499,6 @@ body {
   transition: background 0.2s ease;
 }
 
-.reply-preview .close-reply:hover {
-  background: #ff4d4d;
-  color: #fff;
-}
 .reply-preview-box {
   background-color: #444;
   color: #ccc;
@@ -943,4 +939,27 @@ body {
     transform: translateY(0);
     opacity: 0.3;
   }
+}
+
+.sideways {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.sideways .search-bar {
+  flex: 10;
+}
+
+.sideways .searchUser {
+  flex: 1;
+  margin-bottom: 10px;
+  border-radius: 50%;
+}
+
+.searchUser {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }

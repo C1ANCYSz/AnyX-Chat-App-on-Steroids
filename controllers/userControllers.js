@@ -77,25 +77,45 @@ exports.getConversationKey = async (req, res, next) => {
     next(new AppError('Failed to get conversation key', 500));
   }
 };
-exports.searchUsers = async (req, res) => {
+
+exports.searchUsers = async (req, res, next) => {
   const query = req.query.query;
 
-  if (!query) return res.json([]);
+  if (!query) return next(new AppError('Query is required', 400));
 
   try {
-    const users = await User.find({
-      username: { $regex: query, $options: 'i' },
-    }).limit(10);
-
-    res.json(
-      users.map((user) => ({
-        id: user._id,
-        username: user.username,
-      })),
+    // Find the user
+    const user = await User.findOne({ username: query }).select(
+      'username image',
     );
+
+    if (!user) return next(new AppError('User not found', 404));
+
+    // Check for an existing conversation
+    let conversation = await Conversation.findOne({
+      members: { $all: [req.user._id, user._id] },
+    });
+
+    // If no conversation exists, create one
+    if (!conversation) {
+      conversation = await Conversation.create({
+        members: [req.user._id, user._id],
+      });
+    }
+
+    res.json({
+      success: true,
+      user,
+      convo: {
+        conversationId: conversation._id,
+        otherUserImage: user.image,
+        otherUsername: user.username,
+        lastMessage: conversation.lastMessage || null, // Ensure last message is included
+        lastMessageTime: conversation.updatedAt,
+      },
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error' });
+    return next(new AppError('Failed to search users', 500));
   }
 };
 
@@ -128,7 +148,7 @@ exports.getConversation = async (req, res, next) => {
       .populate('sender', 'username profileImage')
       .populate({
         path: 'replyingTo',
-        select: 'text sender',
+        select: 'text sender type',
         populate: {
           path: 'sender',
           select: 'username profileImage',

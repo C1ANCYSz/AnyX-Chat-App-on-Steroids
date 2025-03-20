@@ -5,6 +5,7 @@ let recordingTimer;
 let recordingSeconds = 0;
 let micStream = null;
 let convoId;
+
 async function toggleVoiceRecording(conversationId) {
   convoId = conversationId;
   const voiceBtn = document.getElementById('sendVoiceMessageBtn');

@@ -49,12 +49,22 @@ makeDraggable(voiceCallContainer);
 
 async function startCall(conversationId, isVideoCall = false) {
   try {
+    const callingUser = document.querySelector(
+      '.chat-header .username',
+    ).innerText;
+
+    console.log(`Calling user: ${callingUser}`);
     console.log(`Starting call in conversation ${conversationId}`);
 
     localStream = await navigator.mediaDevices.getUserMedia({
       audio: true,
       video: isVideoCall,
     });
+
+    voiceCallContainer.innerHTML = `
+    <h1 class="caller-name">${callingUser}</h1>
+    <h2 style="color:white;">Ringing...</h2>
+    `;
 
     localVideo.srcObject = localStream;
     callRoom = conversationId;

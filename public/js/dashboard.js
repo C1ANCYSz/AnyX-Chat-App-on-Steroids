@@ -5,7 +5,6 @@ const elements = {
   userList: document.querySelector('.user-list'),
   messagesContainer: document.querySelector('.messages'),
   loadingIndicator: document.querySelector('.loading'),
-  newChatButton: document.querySelector('.newChat'),
   chatSearch: document.querySelector('.chatSearch'),
   searchInput: document.getElementById('searchInput'),
   searchButton: document.getElementById('searchButton'),
@@ -82,12 +81,6 @@ function arrayBufferToPem(buffer, label) {
   return `-----BEGIN ${label}-----\n${formattedKey}\n-----END ${label}-----`;
 }
 
-async function initializeKeysAndLoadConversations() {
-  await generateRSAKeys();
-
-  loadConversations();
-}
-
 async function encryptWithRSA(data) {
   if (!state.publicKeyPem) {
     throw new Error('Public key is not generated. Call generateRSAKeys first.');
@@ -136,7 +129,11 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
-initializeKeysAndLoadConversations();
+async function initializeKeysAndLoadConversations() {
+  await generateRSAKeys();
+
+  loadConversations();
+}
 
 /*
                 function generateRSAKeys() {
@@ -229,11 +226,12 @@ socket.on('typing', ({ conversationId, userId }) => {
     const spans = indicator.querySelectorAll('span');
     spans.forEach((dot, index) => {
       dot.style.animation = `jump 1.5s infinite`;
-      dot.style.animationDelay = `${index * 0.2}s`; // Staggered animation
+      dot.style.animationDelay = `${index * 0.2}s`;
     });
+    document.querySelector('.messages').appendChild(indicator);
+
     elements.messagesContainer.scrollTop =
       elements.messagesContainer.scrollHeight;
-    document.querySelector('.messages').appendChild(indicator);
   }
 
   // Remove typing indicator after 3 seconds of no typing activity
@@ -275,6 +273,15 @@ function sendMedia() {
       );
 
       const data = await response.json();
+
+      const { encryptedContent, iv } = await encryptMedia(
+        file,
+        state.globalDecryptedKey,
+      );
+
+      console.log('Encrypted content:', encryptedContent);
+
+      console.log('data', data);
 
       if (data.secure_url) {
         console.log('Media uploaded successfully:', data.secure_url);
@@ -325,17 +332,25 @@ function formatTime(timestamp) {
   const now = new Date();
   const messageTime = new Date(timestamp);
   const diffMs = now - messageTime;
+  const diffSeconds = Math.floor(diffMs / 1000);
   const diffMinutes = Math.floor(diffMs / (1000 * 60));
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffMinutes < 1) return 'NOW';
+  if (diffSeconds < 10) return 'NOW';
+  if (diffMinutes < 1)
+    return `${diffSeconds} sec${diffSeconds > 1 ? 's' : ''} ago`;
   if (diffMinutes < 60)
     return `${diffMinutes} min${diffMinutes > 1 ? 's' : ''} ago`;
   if (diffHours < 24) return `${diffHours} hr${diffHours > 1 ? 's' : ''} ago`;
   if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
 
-  return messageTime.toLocaleDateString(); // Show full date for older messages
+  // If older than a week, show formatted date (e.g., "Mar 5, 2025")
+  return messageTime.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
 }
 
 async function loadConversations() {
@@ -374,20 +389,23 @@ async function loadConversations() {
   }
 }
 
-async function createUserDiv(convo) {
+async function createUserDiv(convo, added = false) {
   const userDiv = document.createElement('div');
   userDiv.classList.add('user');
   userDiv.dataset.id = convo.conversationId;
 
   let lastMessageText = 'Unknown Message Type';
 
+  // Fetch the conversation key once
   const key = await fetchConversationKey(
     convo.conversationId,
     state.publicKeyPem,
   );
   console.log(key);
 
-  if (convo.lastMessage?.type === 'text') {
+  if (!key) {
+    lastMessageText = 'Encrypted Message';
+  } else if (convo.lastMessage?.type === 'text') {
     lastMessageText = decryptMessage(convo.lastMessage.text, key);
   } else if (convo.lastMessage?.type === 'voice') {
     lastMessageText = 'Voice Message';
@@ -395,26 +413,32 @@ async function createUserDiv(convo) {
     lastMessageText = 'Image';
   }
 
-  fetchConversationKey(convo.conversationId, state.publicKeyPem).then((key) => {
-    userDiv.innerHTML = `
-  <div class="horiFlex">
-    <div class="nameAndImage">
-      <img class="userImg" src="${convo.otherUserImage}" alt="User Image" />
-      <div class="lastMessageAndName">
-        <span class="username">@${convo.otherUsername}</span>
-        <p class="lastMessage">${lastMessageText}</p>
+  userDiv.innerHTML = `
+    <div class="horiFlex">
+      <div class="nameAndImage">
+        <img class="userImg" src="${convo.otherUserImage}" alt="User Image" />
+        <div class="lastMessageAndName">
+          <span class="username">@${convo.otherUsername}</span>
+          <p class="lastMessage">${lastMessageText}</p>
+        </div>
       </div>
     </div>
-  </div>
-  <div class="ago">
-    <span class="time" data-timestamp="${convo.lastMessageTime}">
-      ${formatTime(convo.lastMessageTime)}
-    </span>
-  </div>
-`;
+    <div class="ago">
+      <span class="time" data-timestamp="${convo.lastMessageTime}">
+        ${formatTime(convo.lastMessageTime)}
+      </span>
+    </div>
+  `;
 
-    userDiv.addEventListener('click', () => handleUserClick(userDiv, convo));
-  });
+  if (added) {
+    state.globalConversationId = convo.conversationId;
+
+    elements.userList.prependChild(userDiv);
+
+    // Await text area and message fetching before proceeding
+  }
+
+  userDiv.addEventListener('click', () => handleUserClick(userDiv, convo));
 
   return userDiv;
 }
@@ -492,7 +516,7 @@ function createActionButtons(msg, key) {
     replyPreview.innerHTML = `
   <div class="replyFlex">
     <span class="username">@${msg.sender.username}</span>
-    <span class="close-reply">❌</span>
+    <span class="close-reply">X</span>
   </div>
   <p>${msg.type === 'text' ? decryptMessage(msg.text, key) : msg.type === 'image' ? 'Image' : 'Voice Message'}</p>
 `;
@@ -592,7 +616,9 @@ function addMessageToUI(msg, myId, key, fetching = true, rece = false) {
                 ? 'You'
                 : msg.replyingTo.sender?.username || 'Unknown'
             }</strong>
-            ${decryptMessage(msg.replyingTo.text, key)}
+
+            </br>
+            ${msg.replyingTo.type === 'text' ? decryptMessage(msg.replyingTo.text, key) : msg.replyingTo.type === 'image' ? 'Image' : 'Voice Message'}
           </div>`
       : `<div class="reply-preview-content"><strong>Replying to</strong>: [Message not found]</div>`;
 
@@ -1009,9 +1035,7 @@ function updateConversationLastMessage(conversationId, message) {
     if (timeElement) {
       const formattedTimestamp = new Date(messageTime).toISOString(); // Ensure correct ISO 8601 format
       timeElement.dataset.timestamp = formattedTimestamp; // Store as ISO 8601
-      timeElement.textContent = formatTime(
-        Date.now() - new Date(messageTime).getTime(),
-      );
+      timeElement.textContent = formatTime(formattedTimestamp); // Pass full timestamp
     }
   }
 }
@@ -1021,66 +1045,31 @@ function updateTimeAgo() {
     const timestampStr = timeElement.dataset.timestamp;
     if (!timestampStr) return;
 
-    const timestampMs = new Date(timestampStr).getTime(); // Convert ISO 8601 to milliseconds
-    if (isNaN(timestampMs)) return; // Prevent invalid timestamps
-
-    const elapsedTime = Date.now() - timestampMs;
-    timeElement.textContent = formatTime(elapsedTime);
+    timeElement.textContent = formatTime(timestampStr); // Pass timestamp string directly
   });
 }
 
-setInterval(updateTimeAgo, 60000); // Update every minute
+async function encryptMedia(file, aesKeyBase64) {
+  const aesKeyRaw = Uint8Array.from(atob(aesKeyBase64), (c) => c.charCodeAt(0));
+  const aesKey = await window.crypto.subtle.importKey(
+    'raw',
+    aesKeyRaw,
+    { name: 'AES-GCM' },
+    false,
+    ['encrypt'],
+  );
 
-elements.newChatButton.addEventListener('click', () => {
-  elements.chatSearch.style.display =
-    elements.chatSearch.style.display === 'none' ? 'block' : 'none';
-  elements.searchInput.focus();
-});
+  const iv = window.crypto.getRandomValues(new Uint8Array(12)); // Generate IV
+  const fileBuffer = await file.arrayBuffer(); // Convert file to ArrayBuffer
 
-elements.searchButton.addEventListener('click', () => {
-  const query = elements.searchInput.value.trim();
-  if (query) {
-    searchUsers(query);
-  } else {
-    elements.searchResults.innerHTML =
-      '<div>Please enter a username to search.</div>';
-  }
-});
+  const encryptedContent = await window.crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    aesKey,
+    fileBuffer,
+  );
 
-async function searchUsers(query) {
-  try {
-    const response = await fetch(`/api/users/search-users?query=${query}`);
-    const users = await response.json();
-
-    if (users.length === 0) {
-      elements.searchResults.innerHTML = '<div>No users found.</div>';
-      return;
-    }
-
-    elements.searchResults.innerHTML = users
-      .map(
-        (user) => `
-                  <div data-id="${user.id}">
-                    ${user.username}
-                    <img src="${user.image}" alt="User Image" />
-                  </div>
-                `,
-      )
-      .join('');
-  } catch (error) {
-    console.error('Error searching users:', error);
-    elements.searchResults.innerHTML =
-      '<div>Error searching users. Try again later.</div>';
-  }
+  return { encryptedContent, iv };
 }
 
-elements.searchResults.addEventListener('click', (e) => {
-  if (e.target.dataset.id) {
-    const userId = e.target.dataset.id;
-    const username = e.target.innerText;
-
-    startChat(userId, username);
-    chatSearch.style.display = 'none';
-    searchInput.value = '';
-  }
-});
+setInterval(updateTimeAgo, 60000); // Update every minute
+initializeKeysAndLoadConversations();

@@ -79,7 +79,11 @@ io.on('connection', async (socket) => {
 
         const populatedMessage = await newMessage.populate([
           { path: 'sender', select: 'username image' },
-          { path: 'replyingTo', select: 'text sender', populate: 'sender' },
+          {
+            path: 'replyingTo',
+            select: 'text sender type',
+            populate: 'sender',
+          },
         ]);
 
         const conversation = await Conversation.findById(conversationId);
