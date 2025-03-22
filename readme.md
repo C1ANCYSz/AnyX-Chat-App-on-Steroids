@@ -87,8 +87,8 @@ This is a **secure chat application** built using the **MEN stack** (MongoDB, Ex
 1. **Clone the Repository:**
 
 ```bash
-git clone https://github.com/your-repo/chat-app.git
-cd chat-app
+git https://github.com/C1ANCYSz/Chat-App-on-Steroids.git
+cd Chat-App-on-Steroids
 ```
 
 2. **Install Dependencies:**
@@ -97,7 +97,7 @@ cd chat-app
 npm install
 ```
 
-3. **Generate SSL Certificates (for HTTPS):**
+3. **Generate SSL Certificates (for HTTPS):** #optional
 
 ```bash
 mkdir ssl
