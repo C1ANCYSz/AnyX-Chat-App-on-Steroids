@@ -625,7 +625,6 @@ function addMessageToUI(msg, myId, key, fetching = true, rece = false) {
     messageDiv.prepend(replyPreviewDiv);
   }
 
-  // Handle different message types
   let messageContent;
   if (msg.type === 'text') {
     messageContent = document.createElement('p');
@@ -638,8 +637,8 @@ function addMessageToUI(msg, myId, key, fetching = true, rece = false) {
     );
   } else if (msg.type === 'image') {
     messageContent = document.createElement('img');
-    messageContent.src = msg.text; // Assuming `msg.text` is a Base64 or URL
-    messageContent.style.maxWidth = '250px'; // Adjust size
+    messageContent.src = msg.text;
+    messageContent.style.maxWidth = '250px';
     messageContent.style.borderRadius = '8px';
     messageContent.style.border =
       msg.sender?._id === myId
@@ -664,7 +663,6 @@ function addMessageToUI(msg, myId, key, fetching = true, rece = false) {
 
   messageDiv.appendChild(actionAndMessage);
 
-  // Add message to the container
   if (rece) {
     elements.messagesContainer.appendChild(messageDiv);
   } else {
@@ -674,20 +672,18 @@ function addMessageToUI(msg, myId, key, fetching = true, rece = false) {
   }
 }
 function showImagePreview(imageSrc) {
-  // Create overlay
   const overlay = document.createElement('div');
   overlay.style.position = 'fixed';
   overlay.style.top = '0';
   overlay.style.left = '0';
   overlay.style.width = '100vw';
   overlay.style.height = '100vh';
-  overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.8)'; // Dark background
+  overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
   overlay.style.display = 'flex';
   overlay.style.justifyContent = 'center';
   overlay.style.alignItems = 'center';
   overlay.style.zIndex = '1000';
 
-  // Create full-screen image
   const image = document.createElement('img');
   image.src = imageSrc;
   image.style.maxWidth = '90vw';
@@ -870,7 +866,6 @@ async function showNotification(sender, message, conversationId) {
   notificationContainer.appendChild(notification);
   notificationContainer.style.display = 'block';
 
-  // Auto-hide after 5 seconds
   setTimeout(() => {
     notification.remove();
     if (notificationContainer.children.length === 0) {
@@ -913,6 +908,8 @@ async function sendMessage() {
 }
 
 socket.on('messageSent', ({ newMessage, conversationId }) => {
+  updateConversationLastMessage(conversationId, newMessage);
+
   if (conversationId === state.globalConversationId) {
     addMessageToUI(
       newMessage,
@@ -1018,25 +1015,30 @@ elements.messagesContainer.addEventListener('scroll', () => {
 
 function updateConversationLastMessage(conversationId, message) {
   const userDiv = document.querySelector(`.user[data-id="${conversationId}"]`);
-  if (userDiv) {
-    if (message.type === 'text') {
-      userDiv.querySelector('.lastMessage').textContent = decryptMessage(
-        message.text,
-        state.globalDecryptedKey,
-      );
-    } else if (message.type === 'voice') {
-      userDiv.querySelector('.lastMessage').textContent = 'Voice Message';
-    } else if (message.type === 'image') {
-      userDiv.querySelector('.lastMessage').textContent = 'Image';
-    }
+  if (!userDiv) return;
 
-    const timeElement = userDiv.querySelector('.ago .time');
-    const messageTime = timeElement?.dataset.timestamp;
-    if (timeElement) {
-      const formattedTimestamp = new Date(messageTime).toISOString(); // Ensure correct ISO 8601 format
-      timeElement.dataset.timestamp = formattedTimestamp; // Store as ISO 8601
-      timeElement.textContent = formatTime(formattedTimestamp); // Pass full timestamp
-    }
+  const lastMessageElement = userDiv.querySelector('.lastMessage');
+
+  // Update last message text based on type
+  if (message.type === 'text') {
+    lastMessageElement.textContent = decryptMessage(
+      message.text,
+      state.globalDecryptedKey,
+    );
+  } else if (message.type === 'voice') {
+    lastMessageElement.textContent = 'Voice Message';
+  } else if (message.type === 'image') {
+    lastMessageElement.textContent = 'Image';
+  }
+
+  // Update the timestamp
+  const timeElement = userDiv.querySelector('.ago .time');
+  if (timeElement) {
+    const messageTime = new Date(
+      message.timestamp || message.time || Date.now(),
+    ); // Ensure valid Date object
+    timeElement.dataset.timestamp = messageTime.toISOString(); // Store as ISO format for consistency
+    timeElement.textContent = formatTime(messageTime);
   }
 }
 

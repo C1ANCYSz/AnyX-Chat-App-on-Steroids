@@ -53,6 +53,10 @@ async function startCall(conversationId, isVideoCall = false) {
       '.chat-header .username',
     ).innerText;
 
+    const callingUserImage = document.querySelector('.chat-header img').src;
+
+    console.log(callingUserImage);
+
     console.log(`Calling user: ${callingUser}`);
     console.log(`Starting call in conversation ${conversationId}`);
 
@@ -62,8 +66,19 @@ async function startCall(conversationId, isVideoCall = false) {
     });
 
     voiceCallContainer.innerHTML = `
+  <div style=" display: flex; justify-content: center; align-items: center; flex-direction:row; gap:10px">
+     <img src="${callingUserImage}" style="height:50px; width:50px"/>
     <h1 class="caller-name">${callingUser}</h1>
-    <h2 style="color:white;">Ringing...</h2>
+  </div>
+    <h3 style="color:white;">Ringing...</h3>
+      <div style=" display: flex; justify-content: center; align-items: center; flex-direction:row; gap:10px"> 
+         <div id="endVoiceCall" onclick="endCall()" class="control-btn end-call">
+      <i class="bx bxs-phone-call"></i>
+    </div>
+    <div id="muteVoiceCall" onclick="toggleMute()" class="control-btn">
+      <i class="bx bxs-microphone-off"></i>
+    </div>
+      </div>
     `;
 
     localVideo.srcObject = localStream;
@@ -393,7 +408,6 @@ async function terminateScreenShare() {
 
 async function endCall() {
   console.log('Ending call...');
-
   try {
     if (localStream) {
       localStream.getTracks().forEach((track) => {
