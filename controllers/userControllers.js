@@ -2,13 +2,13 @@ const User = require('../models/User');
 const Conversation = require('../models/Conversation');
 const AppError = require('../utils/AppError');
 const Message = require('../models/Message');
-const crypto = require('crypto');
 const fs = require('fs');
 const NodeRSA = require('node-rsa');
 
 require('express-async-errors');
 
 const privateKey = fs.readFileSync('./keys/private.pem', 'utf8');
+/*
 const redis = require('redis');
 
 const client = redis.createClient();
@@ -20,7 +20,7 @@ client.on('error', (err) => console.error('Redis error:', err));
   } catch (err) {
     console.error('Failed to connect to Redis:', err);
   }
-})();
+})();*/
 
 function decryptWithRSA(encryptedData, privateKey) {
   try {
@@ -57,15 +57,16 @@ exports.getConversationKey = async (req, res, next) => {
       );
     }
 
-    let decryptedKey = await client.get(`convKey:${id}`);
+    // Redis caching disabled
+    // let decryptedKey = await client.get(`convKey:${id}`);
 
-    if (!decryptedKey) {
-      decryptedKey = decryptWithRSA(conversation.key, privateKey);
-      if (!decryptedKey)
-        return next(new AppError('Failed to decrypt conversation key', 500));
+    // if (!decryptedKey) {
+    const decryptedKey = decryptWithRSA(conversation.key, privateKey);
+    if (!decryptedKey)
+      return next(new AppError('Failed to decrypt conversation key', 500));
 
-      await client.setEx(`convKey:${id}`, 3600, decryptedKey);
-    }
+    //   await client.setEx(`convKey:${id}`, 3600, decryptedKey);
+    // }
 
     const encryptedKey = encryptWithRSA(decryptedKey, publicKey);
     if (!encryptedKey)

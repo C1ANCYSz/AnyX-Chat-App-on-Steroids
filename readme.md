@@ -132,6 +132,7 @@ Visit `https://localhost:3000` in your browser.
 - Messages are **encrypted with AES** on the client side and sent to the server.
 - The server **broadcasts encrypted messages** to recipients.
 - Recipients **decrypt the AES key** with their **private key** and then decrypt the message.
+- can use other techniques like **(DH, SRP, SPAKE2,...)**
 
 ## 🛡️ Security Features
 
@@ -149,15 +150,9 @@ Visit `https://localhost:3000` in your browser.
 
 ## 📦 Dependencies
 
-Here are some key dependencies from `package.json`:
-
 - **Backend:** `express`, `mongoose`, `jsonwebtoken`, `bcryptjs`
 - **Security & Encryption:** `crypto-js`, `node-rsa`, `validator`
 - **WebSockets & Realtime:** `socket.io`
 - **Email Handling:** `mailtrap`
 - **File Uploads:** `multer`, `cloudinary`
 - **Development Tools:** `eslint`, `nodemon`, `prettier`
-
----
-
-This documentation provides a complete overview of the project, making it easy for developers to set up, contribute, and understand the security mechanisms behind the chat system. 🚀
